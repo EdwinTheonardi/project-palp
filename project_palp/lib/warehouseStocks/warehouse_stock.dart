@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/store_service.dart';
+import '../services/store_service.dart'; 
 import 'package:intl/intl.dart';
 
+const Color midnightBlue = Color(0xFF003366);
+const Color accentOrange = Color(0xFFFFA500);
+const Color cleanWhite = Colors.white;
+
 class WarehouseStockPage extends StatefulWidget {
-  const WarehouseStockPage({ super.key });
+  const WarehouseStockPage({super.key});
 
   @override
   State<WarehouseStockPage> createState() => _WarehouseStockPageState();
@@ -21,15 +25,15 @@ class _WarehouseStockPageState extends State<WarehouseStockPage> {
     _loadStocksForStore();
   }
 
+
   Future<void> _loadStocksForStore() async {
     final storeCode = await StoreService.getStoreCode();
 
     if (storeCode == null || storeCode.isEmpty) {
       print("Store code tidak ditemukan.");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-
     try {
       final storeSnapshot = await FirebaseFirestore.instance
           .collection('stores')
@@ -39,7 +43,7 @@ class _WarehouseStockPageState extends State<WarehouseStockPage> {
 
       if (storeSnapshot.docs.isEmpty) {
         print("Store dengan code $storeCode tidak ditemukan.");
-        setState(() => _loading = false);
+        if (mounted) setState(() => _loading = false);
         return;
       }
 
@@ -53,117 +57,180 @@ class _WarehouseStockPageState extends State<WarehouseStockPage> {
           .where('store_ref', isEqualTo: storeRef)
           .get();
 
-      setState(() {
-        _storeRef = storeRef;
-        _allStocks = stocksSnapshot.docs;
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _storeRef = storeRef;
+          _allStocks = stocksSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat data: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
   Future<String> _getProductName(DocumentReference? productRef) async {
-    if (productRef == null) return '-';
+    if (productRef == null) return 'Produk Tidak Ditemukan';
     try {
       final doc = await productRef.get();
       final data = doc.data() as Map<String, dynamic>?;
-      return data?['name'] ?? '-';
+      return data?['name'] ?? 'Tanpa Nama';
     } catch (e) {
       print("Gagal mendapatkan nama produk: $e");
-      return '-';
+      return 'Error';
     }
   }
 
   Future<String> _getWarehouseName(DocumentReference? warehouseRef) async {
-    if (warehouseRef == null) return '-';
+    if (warehouseRef == null) return 'Gudang Tidak Ditemukan';
     try {
       final doc = await warehouseRef.get();
       final data = doc.data() as Map<String, dynamic>?;
-      return data?['name'] ?? '-';
+      return data?['name'] ?? 'Tanpa Nama';
     } catch (e) {
       print("Gagal mendapatkan nama warehouse: $e");
-      return '-';
+      return 'Error';
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
-      body: Stack(
-        children: [
-          _loading
-              ? Center(child: CircularProgressIndicator())
-              : _allStocks.isEmpty
-                  ? Center(child: Text('Tidak ada data stok per gudang'))
-                  : RefreshIndicator(
-                      onRefresh: _loadStocksForStore,
-                      child: ListView.builder(
-                        itemCount: _allStocks.length,
-                        itemBuilder: (context, index) {
-                          final stock = _allStocks[index].data() as Map<String, dynamic>;
+      backgroundColor: theme.scaffoldBackgroundColor,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator(color: accentOrange))
+          : _allStocks.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Belum Ada Stok',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Tarik ke bawah untuk menyegarkan.',
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadStocksForStore,
+                  color: accentOrange, 
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(8.0),
+                    itemCount: _allStocks.length,
+                    itemBuilder: (context, index) {
+                      final stock = _allStocks[index].data() as Map<String, dynamic>;
 
-                          return Card(
-                            margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            elevation: 3,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(16.0),
-                              child: Table(
-                                columnWidths: {
-                                  0: FlexColumnWidth(1),
-                                  1: FlexColumnWidth(1),
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                        elevation: 2,
+                        color: cleanWhite,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              FutureBuilder<String>(
+                                future: _getProductName(stock['product_ref']),
+                                builder: (context, snapshot) {
+                                  return Text(
+                                    snapshot.data ?? 'Memuat...',
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: midnightBlue,
+                                    ),
+                                  );
                                 },
-                                children: [
-                                  TableRow(
-                                    children: [
-                                      TableCell(
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(bottom: 8.0),
-                                          child: FutureBuilder<String>(
-                                            future: _getProductName(stock['product_ref']),
-                                            builder: (context, snapshot) {
-                                              return Text("Nama Produk: ${snapshot.data ?? '-'}");
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                              ),
+                              const SizedBox(height: 12),
 
-                                  TableRow(
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: FutureBuilder<String>(
+                                      future: _getWarehouseName(stock['warehouse_ref']),
+                                      builder: (context, snapshot) {
+                                        return _buildInfoRow(
+                                          icon: Icons.warehouse_outlined,
+                                          text: snapshot.data ?? 'Memuat...',
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          FutureBuilder<String>(
-                                            future: _getWarehouseName(stock['warehouse_ref']),
-                                            builder: (context, snapshot) {
-                                              return Text('Nama Gudang: ${snapshot.data ?? '-'}');
-                                            },
-                                          ),
-                                          Text("Stok: ${stock['qty'] ?? '-'}"),
-                                          Text(
-                                            'Terakhir diupdate: ${stock['last_updated_at'] != null 
-                                              ? DateFormat('dd/MM/yyyy').format((stock['last_updated_at'] as Timestamp).toDate()) 
-                                              : '-'}'
-                                          ),
-                                        ],
+                                      const Text(
+                                        "Jumlah Stok",
+                                        style: TextStyle(color: Colors.grey, fontSize: 12),
+                                      ),
+                                      Text(
+                                        "${stock['qty'] ?? '0'}",
+                                        style: const TextStyle(
+                                          color: accentOrange,
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-        ],
-      ),
+                              const Divider(height: 24),
+
+                              _buildInfoRow(
+                                icon: Icons.calendar_today_outlined,
+                                text: 'Update: ${stock['last_updated_at'] != null ? DateFormat('dd MMM yyyy').format((stock['last_updated_at'] as Timestamp).toDate()) : '-'}',
+                                iconSize: 14,
+                                textSize: 12,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildInfoRow({
+    required IconData icon,
+    required String text,
+    double iconSize = 16,
+    double textSize = 14,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey[600], size: iconSize),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(fontSize: textSize, color: Colors.grey[700]),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../services/store_service.dart';
 import 'add_shipment.dart';
 import 'edit_shipment.dart';
 
 class ShipmentPage extends StatefulWidget {
-  const ShipmentPage({ super.key });
+  const ShipmentPage({super.key});
 
   @override
   State<ShipmentPage> createState() => _ShipmentPageState();
@@ -16,6 +17,10 @@ class _ShipmentPageState extends State<ShipmentPage> {
   List<DocumentSnapshot> _allShipments = [];
   bool _loading = true;
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -24,44 +29,32 @@ class _ShipmentPageState extends State<ShipmentPage> {
 
   Future<void> _loadShipmentsForStore() async {
     final storeCode = await StoreService.getStoreCode();
-
     if (storeCode == null || storeCode.isEmpty) {
       print("Store code tidak ditemukan.");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-
     try {
-      final storeSnapshot = await FirebaseFirestore.instance
-          .collection('stores')
-          .where('code', isEqualTo: storeCode)
-          .limit(1)
-          .get();
-
+      final storeSnapshot = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
       if (storeSnapshot.docs.isEmpty) {
         print("Store dengan code $storeCode tidak ditemukan.");
-        setState(() => _loading = false);
+        if (mounted) setState(() => _loading = false);
         return;
       }
-
       final storeDoc = storeSnapshot.docs.first;
       final storeRef = storeDoc.reference;
-
       print("Store reference ditemukan: ${storeRef.path}");
-
-      final shipmentsSnapshot = await FirebaseFirestore.instance
-          .collection('salesGoodsShipment')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      setState(() {
-        _storeRef = storeRef;
-        _allShipments = shipmentsSnapshot.docs;
-        _loading = false;
-      });
+      final shipmentsSnapshot = await FirebaseFirestore.instance.collection('salesGoodsShipment').where('store_ref', isEqualTo: storeRef).get();
+      if (mounted) {
+        setState(() {
+          _storeRef = storeRef;
+          _allShipments = shipmentsSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat data: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -71,26 +64,37 @@ class _ShipmentPageState extends State<ShipmentPage> {
       body: Stack(
         children: [
           _loading
-              ? Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator(color: accentOrange))
               : _allShipments.isEmpty
-                  ? Center(child: Text('Tidak ada data pengiriman'))
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.local_shipping_outlined, size: 80, color: Colors.grey[400]),
+                          const SizedBox(height: 16),
+                          const Text('Tidak ada data pengiriman', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                        ],
+                      ),
+                    )
                   : RefreshIndicator(
                       onRefresh: _loadShipmentsForStore,
+                      color: accentOrange,
                       child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
                         itemCount: _allShipments.length,
                         itemBuilder: (context, index) {
                           final shipment = _allShipments[index].data() as Map<String, dynamic>;
-
                           return Card(
-                            margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            elevation: 3,
+                            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                            elevation: 2,
+                            color: cleanWhite,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
                               child: Table(
-                                columnWidths: {
+                                columnWidths: const {
                                   0: FlexColumnWidth(1),
                                   1: FlexColumnWidth(1),
                                 },
@@ -102,9 +106,10 @@ class _ShipmentPageState extends State<ShipmentPage> {
                                           padding: const EdgeInsets.only(bottom: 8.0),
                                           child: Text(
                                             'No Form: ${shipment['no_form'] ?? '-'}',
-                                            style: TextStyle(
+                                            style: const TextStyle(
                                               fontSize: 16,
                                               fontWeight: FontWeight.bold,
+                                              color: midnightBlue,
                                             ),
                                           ),
                                         ),
@@ -114,29 +119,23 @@ class _ShipmentPageState extends State<ShipmentPage> {
                                           mainAxisAlignment: MainAxisAlignment.end,
                                           children: [
                                             IconButton(
-                                              icon: Icon(Icons.edit, color: Colors.lightBlue),
+                                              icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600]),
                                               tooltip: "Edit Shipment",
                                               onPressed: () async {
-                                                final updated = await Navigator.push(
+                                                await Navigator.push(
                                                   context,
                                                   MaterialPageRoute(
-                                                    builder: (context) => EditShipmentPage(
-                                                      shipmentRef: _allShipments[index].reference,
-                                                    ),
+                                                    builder: (context) => EditShipmentPage(shipmentRef: _allShipments[index].reference),
                                                   ),
                                                 );
-                                                await _loadShipmentsForStore(); // Refresh list setelah kembali
+                                                await _loadShipmentsForStore();
                                               },
                                             ),
                                             IconButton(
-                                              icon: Icon(Icons.delete, color: Colors.lightBlue),
+                                              icon: Icon(Icons.delete_outline, color: Colors.redAccent[400]),
                                               tooltip: "Hapus Shipment",
                                               onPressed: () async {
-                                                _showDeleteConfirmationDialog(
-                                                  context,
-                                                  _allShipments[index].reference,
-                                                );                          
-                                                await _loadShipmentsForStore(); 
+                                                _showDeleteConfirmationDialog(context, _allShipments[index].reference);
                                               },
                                             ),
                                           ],
@@ -144,46 +143,42 @@ class _ShipmentPageState extends State<ShipmentPage> {
                                       ),
                                     ],
                                   ),
-
-                                  // Baris 2: Info kiri & kanan
                                   TableRow(
                                     children: [
                                       Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text('Nama Penerima: ${shipment['receiver_name'] ?? '-'}'),
-                                          Text('Item Total: ${shipment['item_total'] ?? '-'}'),
+                                          Text('Nama Penerima: ${shipment['receiver_name'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
+                                          Text('Item Total: ${shipment['item_total'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
                                         ],
                                       ),
                                       Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Text('Created At: ${shipment['created_at']?.toDate() ?? '-'}'),
-                                          Text('Post Date: ${shipment['post_date'] ?? '-'}'),
+                                          Text('Created At: ${shipment['created_at'] != null ? DateFormat('dd/MM/yy HH:mm').format(shipment['created_at'].toDate()) : '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                          Text('Post Date: ${shipment['post_date'] ?? '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                                         ],
                                       ),
                                     ],
                                   ),
-                                  // Baris 3: Tombol
                                   TableRow(
                                     children: [
-                                      TableCell(child: SizedBox()), // Kosong
+                                      const TableCell(child: SizedBox()),
                                       TableCell(
                                         child: Align(
                                           alignment: Alignment.bottomRight,
                                           child: TextButton(
+                                            style: TextButton.styleFrom(foregroundColor: accentOrange),
                                             onPressed: () async {
                                               await Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => ShipmentDetailsPage(
-                                                    shipmentRef: _allShipments[index].reference,
-                                                  ),
+                                                  builder: (context) => ShipmentDetailsPage(shipmentRef: _allShipments[index].reference),
                                                 ),
                                               );
                                               await _loadShipmentsForStore();
                                             },
-                                            child: Text("Lihat Detail"),
+                                            child: const Text("Lihat Detail"),
                                           ),
                                         ),
                                       ),
@@ -196,23 +191,25 @@ class _ShipmentPageState extends State<ShipmentPage> {
                         },
                       ),
                     ),
-          // Tombol Tambah di kanan bawah
           Positioned(
             bottom: 16,
             right: 16,
-            child: SizedBox(
-              width: 180,
-              height: 45,
-              child: ElevatedButton(  
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => AddShipmentPage()),
-                  );
-                  await _loadShipmentsForStore(); // Refresh data setelah tambah
-                },
-                child: Text('Tambah Shipment'),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddShipmentPage()),
+                );
+                await _loadShipmentsForStore();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentOrange,
+                foregroundColor: cleanWhite,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
+              label: const Text('Tambah Shipment'),
             ),
           ),
         ],
@@ -224,16 +221,18 @@ class _ShipmentPageState extends State<ShipmentPage> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Konfirmasi'),
-        content: Text('Yakin ingin menghapus shipment ini?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Konfirmasi'),
+        content: const Text('Yakin ingin menghapus shipment ini?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal'),
+            child: const Text('Batal'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: const Text('Hapus'),
           ),
         ],
       ),
@@ -242,37 +241,23 @@ class _ShipmentPageState extends State<ShipmentPage> {
     if (shouldDelete == true) {
       try {
         final detailsSnapshot = await ref.collection('details').get();
-
         for (final doc in detailsSnapshot.docs) {
           final detailData = doc.data();
           final productRef = detailData['product_ref'] as DocumentReference?;
           final warehouseRef = detailData['warehouse_ref'] as DocumentReference?;
           final qty = (detailData['qty'] ?? 0) as int;
-
           if (productRef != null && warehouseRef != null) {
-            final stockQuery = await FirebaseFirestore.instance
-                .collection('warehouseStocks')
-                .where('product_ref', isEqualTo: productRef)
-                .where('warehouse_ref', isEqualTo: warehouseRef)
-                .limit(1)
-                .get();
-
+            final stockQuery = await FirebaseFirestore.instance.collection('warehouseStocks').where('product_ref', isEqualTo: productRef).where('warehouse_ref', isEqualTo: warehouseRef).limit(1).get();
             final productDoc = await productRef.get();
             if (productDoc.exists) {
               final productData = productDoc.data() as Map<String, dynamic>;
               final currentGlobalStock = productData['stock'] ?? 0;
-
-              await productRef.update({
-                'stock': currentGlobalStock + qty,
-              });
+              await productRef.update({'stock': currentGlobalStock + qty});
             }
-
             if (stockQuery.docs.isNotEmpty) {
               final stockDoc = stockQuery.docs.first;
               final currentStock = stockDoc['qty'] ?? 0;
-              await stockDoc.reference.update({
-                'qty': currentStock + qty,
-              });
+              await stockDoc.reference.update({'qty': currentStock + qty});
             }
           }
           await doc.reference.delete();
@@ -280,10 +265,11 @@ class _ShipmentPageState extends State<ShipmentPage> {
         await ref.delete();
         await _loadShipmentsForStore();
       } catch (e) {
-        print('Gagal menghapus shipment: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal menghapus shipment: $e')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Gagal menghapus shipment: $e')),
+          );
+        }
       }
     }
   }
@@ -291,7 +277,6 @@ class _ShipmentPageState extends State<ShipmentPage> {
 
 class ShipmentDetailsPage extends StatefulWidget {
   final DocumentReference shipmentRef;
-
   const ShipmentDetailsPage({super.key, required this.shipmentRef});
 
   @override
@@ -302,6 +287,10 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
   List<DocumentSnapshot> _allDetails = [];
   bool _loading = true;
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -310,16 +299,16 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
 
   Future<void> _loadDetails() async {
     try {
-      final detailsSnapshot =
-          await widget.shipmentRef.collection('details').get();
-
-      setState(() {
-        _allDetails = detailsSnapshot.docs;
-        _loading = false;
-      });
+      final detailsSnapshot = await widget.shipmentRef.collection('details').get();
+      if (mounted) {
+        setState(() {
+          _allDetails = detailsSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat detail: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -338,32 +327,40 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Shipment Details')),
+      appBar: AppBar(title: const Text('Detail Pengiriman'), centerTitle: true),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : _allDetails.isEmpty
-              ? const Center(child: Text('Tidak ada detail produk.'))
+              ? Center(
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text('Tidak ada detail produk.', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  ],
+                ))
               : ListView.builder(
+                  padding: const EdgeInsets.all(8.0),
                   itemCount: _allDetails.length,
                   itemBuilder: (context, index) {
-                    final data =
-                        _allDetails[index].data() as Map<String, dynamic>;
+                    final data = _allDetails[index].data() as Map<String, dynamic>;
                     return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      elevation: 2,
+                      color: cleanWhite,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FutureBuilder<String>(
-                              future: _getProductName(data['product_ref']),
-                              builder: (context, snapshot) {
-                                return Text("Nama Produk: ${snapshot.data ?? '-'}");
-                              },
-                            ),
-                            Text("Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? '-'}"),
-                          ],
+                        padding: const EdgeInsets.all(8.0),
+                        child: ListTile(
+                          leading: const Icon(Icons.inventory_2_outlined, color: midnightBlue),
+                          title: FutureBuilder<String>(
+                            future: _getProductName(data['product_ref']),
+                            builder: (context, snapshot) {
+                              return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold, color: midnightBlue));
+                            },
+                          ),
+                          subtitle: Text("Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? '-'}", style: TextStyle(color: Colors.grey[700])),
                         ),
                       ),
                     );

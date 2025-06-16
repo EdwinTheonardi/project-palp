@@ -3,10 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/store_service.dart';
 import 'package:intl/intl.dart';
 import './add_product.dart';
-import './edit_product.dart'; 
+import './edit_product.dart';
 
 class ProductPage extends StatefulWidget {
-  const ProductPage({ super.key });
+  const ProductPage({super.key});
 
   @override
   State<ProductPage> createState() => _ProductPageState();
@@ -17,6 +17,10 @@ class _ProductPageState extends State<ProductPage> {
   List<DocumentSnapshot> _allProducts = [];
   bool _loading = true;
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -25,44 +29,32 @@ class _ProductPageState extends State<ProductPage> {
 
   Future<void> _loadProductsForStore() async {
     final storeCode = await StoreService.getStoreCode();
-
     if (storeCode == null || storeCode.isEmpty) {
       print("Store code tidak ditemukan.");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-
     try {
-      final storeSnapshot = await FirebaseFirestore.instance
-          .collection('stores')
-          .where('code', isEqualTo: storeCode)
-          .limit(1)
-          .get();
-
+      final storeSnapshot = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
       if (storeSnapshot.docs.isEmpty) {
         print("Store dengan code $storeCode tidak ditemukan.");
-        setState(() => _loading = false);
+        if (mounted) setState(() => _loading = false);
         return;
       }
-
       final storeDoc = storeSnapshot.docs.first;
       final storeRef = storeDoc.reference;
-
       print("Store reference ditemukan: ${storeRef.path}");
-
-      final productsSnapshot = await FirebaseFirestore.instance
-          .collection('products')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      setState(() {
-        _storeRef = storeRef;
-        _allProducts = productsSnapshot.docs;
-        _loading = false;
-      });
+      final productsSnapshot = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
+      if (mounted) {
+        setState(() {
+          _storeRef = storeRef;
+          _allProducts = productsSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat data: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -72,19 +64,29 @@ class _ProductPageState extends State<ProductPage> {
       body: Stack(
         children: [
           _loading
-              ? Center(child: CircularProgressIndicator())
+              ? const Center(child: CircularProgressIndicator(color: accentOrange))
               : _allProducts.isEmpty
-                  ? Center(child: Text('Tidak ada data product'))
+                  ? Center(
+                      child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        const Text('Tidak ada data produk', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                      ],
+                    ))
                   : RefreshIndicator(
                       onRefresh: _loadProductsForStore,
+                      color: accentOrange,
                       child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 80),
                         itemCount: _allProducts.length,
                         itemBuilder: (context, index) {
                           final product = _allProducts[index].data() as Map<String, dynamic>;
-
                           return Card(
-                            margin: EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                            elevation: 3,
+                            margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                            elevation: 2,
+                            color: cleanWhite,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -99,25 +101,27 @@ class _ProductPageState extends State<ProductPage> {
                                       children: [
                                         Text(
                                           '${product['name'] ?? '-'}',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
+                                          style: const TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.w600,
+                                            color: midnightBlue,
                                           ),
                                         ),
-                                        SizedBox(height: 4),
+                                        const SizedBox(height: 4),
                                         Text(
-                                          'Harga: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp. ', decimalDigits: 0).format(product['price'] ?? 0)}',
+                                          'Harga: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(product['price'] ?? 0)}',
                                           style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[700],
+                                            color: Colors.grey[800],
                                           ),
                                         ),
-                                        SizedBox(height: 4),
+                                        const SizedBox(height: 4),
                                         Text(
                                           'Stok: ${product['stock'] ?? '-'}',
                                           style: TextStyle(
                                             fontSize: 14,
-                                            color: Colors.grey[700],
+                                            color: Colors.grey[800],
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ],
@@ -126,35 +130,30 @@ class _ProductPageState extends State<ProductPage> {
                                   Row(
                                     children: [
                                       IconButton(
-                                        icon: Icon(Icons.edit, color: Colors.lightBlue),
+                                        icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600]),
                                         tooltip: "Edit Product",
                                         onPressed: () async {
-                                          final updated = await Navigator.push(
+                                          await Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (context) => EditProductPage(
-                                                productRef: _allProducts[index].reference,
-                                              ),
+                                              builder: (context) => EditProductPage(productRef: _allProducts[index].reference),
                                             ),
                                           );
                                           await _loadProductsForStore();
                                         },
                                       ),
                                       IconButton(
-                                        icon: Icon(Icons.delete, color: Colors.lightBlue),
+                                        icon: Icon(Icons.delete_outline, color: Colors.redAccent[400]),
                                         tooltip: "Hapus Product",
                                         onPressed: () async {
-                                          _showDeleteConfirmationDialog(
-                                            context,
-                                            _allProducts[index].reference,
-                                          );
+                                          _showDeleteConfirmationDialog(context, _allProducts[index].reference);
                                         },
                                       ),
                                     ],
                                   ),
                                 ],
                               ),
-                            ), 
+                            ),
                           );
                         },
                       ),
@@ -162,18 +161,21 @@ class _ProductPageState extends State<ProductPage> {
           Positioned(
             bottom: 16,
             right: 16,
-            child: SizedBox(
-              width: 180,
-              height: 45,
-              child: ElevatedButton(  
-                onPressed: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => AddProductPage()),
-                  );
-                  await _loadProductsForStore(); // Refresh data setelah tambah
-                },
-                child: Text('Tambah Product'),
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.add),
+              label: const Text('Tambah Produk'),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddProductPage()),
+                );
+                await _loadProductsForStore();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentOrange,
+                foregroundColor: cleanWhite,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
             ),
           ),
@@ -186,16 +188,18 @@ class _ProductPageState extends State<ProductPage> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Konfirmasi'),
-        content: Text('Yakin ingin menghapus product ini?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Konfirmasi'),
+        content: const Text('Yakin ingin menghapus produk ini?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal'),
+            child: const Text('Batal'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: const Text('Hapus'),
           ),
         ],
       ),

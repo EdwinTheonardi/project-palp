@@ -12,6 +12,10 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   String? _error;
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+
   Future<void> _handleLogin() async {
     setState(() {
       _isLoading = true;
@@ -31,22 +35,25 @@ class _LoginPageState extends State<LoginPage> {
         _error = "❌ Store tidak valid atau gagal login.";
       });
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blue[50],
+      backgroundColor: const Color(0xFFF5F5F5),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: 400),
+            constraints: const BoxConstraints(maxWidth: 400),
             child: Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               elevation: 8,
+              color: cleanWhite,
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 32.0, horizontal: 24.0),
                 child: Column(
@@ -54,41 +61,53 @@ class _LoginPageState extends State<LoginPage> {
                   children: [
                     Text(
                       "Login Store",
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: midnightBlue,
+                      ),
                     ),
-                    SizedBox(height: 24),
+                    const SizedBox(height: 24),
                     TextField(
                       controller: _storeCodeController,
                       decoration: InputDecoration(
                         labelText: "Store Code",
-                        prefixIcon: Icon(Icons.code),
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.storefront_outlined, color: midnightBlue),
+                        filled: true,
+                        fillColor: Colors.black.withOpacity(0.04),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
+                      onSubmitted: (_) => _handleLogin(),
                     ),
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     _isLoading
                         ? Column(
                             children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 8),
-                              Text("Memproses login...", style: TextStyle(color: Colors.grey)),
+                              const CircularProgressIndicator(color: accentOrange),
+                              const SizedBox(height: 8),
+                              Text("Memproses login...", style: TextStyle(color: Colors.grey[600])),
                             ],
                           )
                         : SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
                               onPressed: _handleLogin,
-                              icon: Icon(Icons.login),
-                              label: Text("Login", style: TextStyle(fontSize: 16)),
+                              icon: const Icon(Icons.login),
+                              label: const Text("Login", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                               style: ElevatedButton.styleFrom(
-                                padding: EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                backgroundColor: accentOrange,
+                                foregroundColor: cleanWhite,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               ),
                             ),
                           ),
                     if (_error != null) ...[
-                      SizedBox(height: 16),
-                      Text(_error!, style: TextStyle(color: Colors.red)),
+                      const SizedBox(height: 16),
+                      Text(_error!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.w500)),
                     ]
                   ],
                 ),

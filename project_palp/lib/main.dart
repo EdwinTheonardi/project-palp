@@ -27,14 +27,50 @@ class MyApp extends StatelessWidget {
 
   MyApp({required this.initialStoreCode});
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+  static const Color lightGray = Color(0xFFF5F5F5);
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Aplikasi Penerimaan Barang',
       debugShowCheckedModeBanner: false,
-      home: initialStoreCode != null
-          ? NavigationHomePage()
-          : LoginPage(), // arahkan ke login jika belum login
+      theme: ThemeData(
+        primaryColor: midnightBlue,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: midnightBlue,
+          primary: midnightBlue,
+          secondary: accentOrange,
+          background: lightGray,
+        ),
+        scaffoldBackgroundColor: lightGray,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: midnightBlue,
+          foregroundColor: cleanWhite,
+          elevation: 2.0,
+          titleTextStyle: TextStyle(
+            fontFamily: 'Poppins',
+            fontSize: 20,
+            fontWeight: FontWeight.w600,
+            color: cleanWhite, // INI PERBAIKANNYA
+          ),
+        ),
+        drawerTheme: const DrawerThemeData(
+          backgroundColor: cleanWhite,
+        ),
+        textButtonTheme: TextButtonThemeData(
+          style: TextButton.styleFrom(
+            foregroundColor: accentOrange,
+            textStyle: const TextStyle(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        useMaterial3: true,
+      ),
+      home: initialStoreCode != null ? NavigationHomePage() : LoginPage(),
     );
   }
 }
@@ -69,7 +105,7 @@ class _NavigationHomePageState extends State<NavigationHomePage> {
 
   void _onDrawerItemTapped(int index) {
     setState(() => _selectedIndex = index);
-    Navigator.pop(context); // Menutup drawer setelah memilih
+    Navigator.pop(context);
   }
 
   @override
@@ -77,87 +113,63 @@ class _NavigationHomePageState extends State<NavigationHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_pageTitles[_selectedIndex]),
+        centerTitle: true,
       ),
       drawer: Drawer(
         child: ListView(
+          padding: EdgeInsets.zero,
           children: [
-            DrawerHeader(
+            const DrawerHeader(
               decoration: BoxDecoration(
-                color: Colors.blue,
+                color: MyApp.midnightBlue,
               ),
-              child: Text(
-                ' ',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
+              child: Center(
+                child: Text(
+                  'Menu Utama',
+                  style: TextStyle(
+                    color: MyApp.cleanWhite,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
+            _buildDrawerItem(icon: Icons.receipt_long, title: 'Invoices', index: 5),
+            _buildDrawerItem(icon: Icons.receipt, title: 'Receipts', index: 0),
+            _buildDrawerItem(icon: Icons.local_shipping, title: 'Shipments', index: 1),
+            _buildDrawerItem(icon: Icons.people_alt_outlined, title: 'Suppliers', index: 2),
+            _buildDrawerItem(icon: Icons.warehouse, title: 'Warehouses', index: 3),
+            _buildDrawerItem(icon: Icons.inventory_2_outlined, title: 'Products', index: 4),
+            _buildDrawerItem(icon: Icons.inventory, title: 'Warehouse Stock', index: 6),
+            const Divider(height: 1, thickness: 1),
             ListTile(
-              leading: Icon(Icons.receipt),
-              title: Text('Invoices'),
-              selected: _selectedIndex == 5,
-              onTap: () => _onDrawerItemTapped(5),
-            ),
-            ListTile(
-              leading: Icon(Icons.receipt),
-              title: Text('Receipts'),
-              selected: _selectedIndex == 0,
-              onTap: () => _onDrawerItemTapped(0),
-            ),
-            ListTile(
-              leading: Icon(Icons.local_shipping),
-              title: Text('Shipments'),
-              selected: _selectedIndex == 1,
-              onTap: () => _onDrawerItemTapped(1),
-            ),
-            ListTile(
-              leading: Icon(Icons.people),
-              title: Text('Suppliers'),
-              selected: _selectedIndex == 2,
-              onTap: () => _onDrawerItemTapped(2),
-            ),
-            ListTile(
-              leading: Icon(Icons.warehouse),
-              title: Text('Warehouses'),
-              selected: _selectedIndex == 3,
-              onTap: () => _onDrawerItemTapped(3),
-            ),
-            ListTile(
-              leading: Icon(Icons.shopping_bag),
-              title: Text('Products'),
-              selected: _selectedIndex == 4,
-              onTap: () => _onDrawerItemTapped(4),
-            ),
-            ListTile(
-              leading: Icon(Icons.shopping_bag),
-              title: Text('Warehouse Stock'),
-              selected: _selectedIndex == 6,
-              onTap: () => _onDrawerItemTapped(6),
-            ),
-            ListTile(
-              leading: Icon(Icons.logout),
-              title: Text('Logout'),
+              leading: const Icon(Icons.logout, color: Colors.redAccent),
+              title: const Text('Logout', style: TextStyle(color: Colors.redAccent)),
               onTap: () async {
                 final shouldLogout = await showDialog<bool>(
                   context: context,
                   builder: (context) => AlertDialog(
-                    title: Text("Konfirmasi Logout"),
-                    content: Text("Apakah kamu yakin ingin logout?"),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    title: const Text("Konfirmasi Logout"),
+                    content: const Text("Apakah kamu yakin ingin logout?"),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
-                        child: Text("Batal"),
+                        child: const Text("Batal"),
                       ),
-                      TextButton(
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: MyApp.cleanWhite,
+                        ),
                         onPressed: () => Navigator.of(context).pop(true),
-                        child: Text("Logout"),
+                        child: const Text("Logout"),
                       ),
                     ],
                   ),
                 );
 
-                if (shouldLogout == true) {
+                if (shouldLogout == true && mounted) {
                   await StoreService.clearStore();
                   Navigator.pushReplacement(
                     context,
@@ -170,6 +182,32 @@ class _NavigationHomePageState extends State<NavigationHomePage> {
         ),
       ),
       body: _pages[_selectedIndex],
+    );
+  }
+
+  Widget _buildDrawerItem({required IconData icon, required String title, required int index}) {
+    final bool isSelected = _selectedIndex == index;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: isSelected ? MyApp.accentOrange.withOpacity(0.15) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: ListTile(
+        leading: Icon(icon, color: isSelected ? MyApp.accentOrange : Colors.grey[700]),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? MyApp.accentOrange : Colors.black87,
+          ),
+        ),
+        selected: isSelected,
+        onTap: () => _onDrawerItemTapped(index),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
     );
   }
 }

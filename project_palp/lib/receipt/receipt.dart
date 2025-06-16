@@ -7,7 +7,7 @@ import 'add_receipt.dart';
 import 'edit_receipt.dart';
 
 class ReceiptPage extends StatefulWidget {
-  const ReceiptPage({ super.key });
+  const ReceiptPage({super.key});
 
   @override
   State<ReceiptPage> createState() => _ReceiptPageState();
@@ -18,6 +18,10 @@ class _ReceiptPageState extends State<ReceiptPage> {
   List<DocumentSnapshot> _allReceipts = [];
   bool _loading = true;
 
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -26,44 +30,32 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
   Future<void> _loadReceiptsForStore() async {
     final storeCode = await StoreService.getStoreCode();
-
     if (storeCode == null || storeCode.isEmpty) {
       print("Store code tidak ditemukan.");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
       return;
     }
-
     try {
-      final storeSnapshot = await FirebaseFirestore.instance
-          .collection('stores')
-          .where('code', isEqualTo: storeCode)
-          .limit(1)
-          .get();
-
+      final storeSnapshot = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
       if (storeSnapshot.docs.isEmpty) {
         print("Store dengan code $storeCode tidak ditemukan.");
-        setState(() => _loading = false);
+        if (mounted) setState(() => _loading = false);
         return;
       }
-
       final storeDoc = storeSnapshot.docs.first;
       final storeRef = storeDoc.reference;
-
       print("Store reference ditemukan: ${storeRef.path}");
-
-      final receiptsSnapshot = await FirebaseFirestore.instance
-          .collection('purchaseGoodsReceipts')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      setState(() {
-        _storeRef = storeRef;
-        _allReceipts = receiptsSnapshot.docs;
-        _loading = false;
-      });
+      final receiptsSnapshot = await FirebaseFirestore.instance.collection('purchaseGoodsReceipts').where('store_ref', isEqualTo: storeRef).get();
+      if (mounted) {
+        setState(() {
+          _storeRef = storeRef;
+          _allReceipts = receiptsSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat data: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -95,166 +87,111 @@ class _ReceiptPageState extends State<ReceiptPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _loading
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : _allReceipts.isEmpty
-              ? Center(child: Text('Tidak ada data penerimaan'))
+              ? Center(
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text('Tidak ada data penerimaan', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  ],
+                ))
               : Column(
                   children: [
                     Expanded(
                       child: RefreshIndicator(
                         onRefresh: _loadReceiptsForStore,
+                        color: accentOrange,
                         child: SingleChildScrollView(
                           scrollDirection: Axis.horizontal,
                           child: SizedBox(
-                            width: MediaQuery.of(context).size.width,
+                            width: MediaQuery.of(context).size.width * 2.5,
                             child: DataTable2(
                               columnSpacing: 20,
                               horizontalMargin: 16,
-                              headingRowColor: WidgetStateProperty.all(Colors.blue[100]),
-                              columns: [
-                                DataColumn2(
-                                  label: Center(child: Text('No Form')),
-                                  size: ColumnSize.M,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Created At')),
-                                  size: ColumnSize.M,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Post Date')),
-                                  size: ColumnSize.M,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Grand Total')),
-                                  size: ColumnSize.M,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Qty Total')),
-                                  size: ColumnSize.S,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Synced')),
-                                  size: ColumnSize.S,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Supplier')),
-                                  size: ColumnSize.L,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Warehouse')),
-                                  size: ColumnSize.L,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Receipt Details')),
-                                  size: ColumnSize.L,
-                                ),
-                                DataColumn2(
-                                  label: Center(child: Text('Action')),
-                                  size: ColumnSize.L,
-                                ),
+                              headingRowColor: WidgetStateProperty.all(midnightBlue.withOpacity(0.05)),
+                              headingTextStyle: const TextStyle(color: midnightBlue, fontWeight: FontWeight.bold),
+                              columns: const [
+                                DataColumn2(label: Center(child: Text('No Form')), size: ColumnSize.M),
+                                DataColumn2(label: Center(child: Text('Created At')), size: ColumnSize.L),
+                                DataColumn2(label: Center(child: Text('Post Date')), size: ColumnSize.M),
+                                DataColumn2(label: Center(child: Text('Grand Total')), size: ColumnSize.L),
+                                DataColumn2(label: Center(child: Text('Qty Total')), size: ColumnSize.S),
+                                DataColumn2(label: Center(child: Text('Synced')), size: ColumnSize.S),
+                                DataColumn2(label: Center(child: Text('Supplier')), size: ColumnSize.L),
+                                DataColumn2(label: Center(child: Text('Warehouse')), size: ColumnSize.L),
+                                DataColumn2(label: Center(child: Text('Receipt Details')), size: ColumnSize.M),
+                                DataColumn2(label: Center(child: Text('Action')), size: ColumnSize.L),
                               ],
                               rows: _allReceipts.map((doc) {
                                 final receipt = doc.data() as Map<String, dynamic>;
                                 return DataRow(cells: [
                                   DataCell(Text(receipt['no_form'] ?? '-')),
-                                  DataCell(Text(
-                                  receipt['created_at'] != null
-                                      ? DateFormat('dd MMMM yyyy, HH:mm:ss').format(receipt['created_at'].toDate())
-                                      : '-',
+                                  DataCell(Text(receipt['created_at'] != null ? DateFormat('dd MMM yyyy, HH:mm').format(receipt['created_at'].toDate()) : '-')),
+                                  DataCell(Text(receipt['post_date'] != null ? DateFormat('dd/MM/yyyy').format((receipt['post_date'] as Timestamp).toDate()) : '-')),
+                                  DataCell(Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(receipt['grandtotal'] ?? 0)),
                                   )),
-                                  DataCell(Text(
-                                    receipt['post_date'] != null 
-                                      ? DateFormat('dd/MM/yyyy').format((receipt['post_date'] as Timestamp).toDate()) 
-                                      : '-'
+                                  DataCell(Align(
+                                    alignment: Alignment.centerRight,
+                                    child: Text(receipt['item_total']?.toString() ?? '-'),
                                   )),
-                                  DataCell(
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(
-                                        NumberFormat.currency(
-                                          locale: 'id_ID',
-                                          symbol: 'Rp. ',
-                                          decimalDigits: 0,
-                                        ).format(receipt['grandtotal'] ?? 0),
-                                      ),
+                                  DataCell(Align(
+                                    alignment: Alignment.center,
+                                    child: Icon(
+                                      receipt['synced'] == true ? Icons.check_circle : Icons.cancel,
+                                      color: receipt['synced'] == true ? Colors.green : Colors.red,
                                     ),
-                                  ),
-                                  DataCell(
-                                    Align(
-                                      alignment: Alignment.centerRight,
-                                      child: Text(receipt['item_total']?.toString() ?? '-'),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Align(
-                                      alignment: Alignment.center,
-                                      child: Text(receipt['synced']?.toString() ?? '-'),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    FutureBuilder<String>(
-                                      future: _getSupplierName(receipt['supplier_ref']),
-                                      builder: (context, snapshot) {
-                                        return Text(snapshot.data ?? '-');
+                                  )),
+                                  DataCell(FutureBuilder<String>(
+                                    future: _getSupplierName(receipt['supplier_ref']),
+                                    builder: (context, snapshot) => Text(snapshot.data ?? '...'),
+                                  )),
+                                  DataCell(FutureBuilder<String>(
+                                    future: _getWarehouseName(receipt['warehouse_ref']),
+                                    builder: (context, snapshot) => Text(snapshot.data ?? '...'),
+                                  )),
+                                  DataCell(Center(
+                                    child: TextButton(
+                                      style: TextButton.styleFrom(foregroundColor: accentOrange),
+                                      onPressed: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => ReceiptDetailsPage(receiptRef: doc.reference)),
+                                        );
+                                        await _loadReceiptsForStore();
                                       },
+                                      child: const Text("Detail"),
                                     ),
-                                  ),
-                                  DataCell(
-                                    FutureBuilder<String>(
-                                      future: _getWarehouseName(receipt['warehouse_ref']),
-                                      builder: (context, snapshot) {
-                                        return Text(snapshot.data ?? '-');
-                                      },
+                                  )),
+                                  DataCell(Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600]),
+                                          tooltip: "Edit Receipt",
+                                          onPressed: () async {
+                                            await Navigator.push(
+                                              context,
+                                              MaterialPageRoute(builder: (context) => EditReceiptPage(receiptRef: doc.reference)),
+                                            );
+                                            await _loadReceiptsForStore();
+                                          },
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.delete_outline, color: Colors.redAccent[400]),
+                                          tooltip: "Delete Receipt",
+                                          onPressed: () {
+                                            _showDeleteConfirmationDialog(context, doc.reference);
+                                          },
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                  DataCell(
-                                    Align(
-                                      alignment: Alignment.center,
-                                      child: TextButton(
-                                        onPressed: () async {
-                                          await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => ReceiptDetailsPage(receiptRef: doc.reference),
-                                            ),
-                                          );
-                                          await _loadReceiptsForStore();
-                                        },
-                                        child: Text("Detail"),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Align(
-                                      alignment: Alignment.center,
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          IconButton(
-                                            icon: Icon(Icons.edit, color: Colors.lightBlue),
-                                            tooltip: "Edit Receipt",
-                                            onPressed: () async {
-                                              await Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => EditReceiptPage(receiptRef: doc.reference),
-                                                ),
-                                              );
-                                              await _loadReceiptsForStore();
-                                            },
-                                          ),
-                                          IconButton(
-                                            icon: Icon(Icons.delete, color: Colors.redAccent),
-                                            tooltip: "Delete Receipt",
-                                            onPressed: () async {
-                                              _showDeleteConfirmationDialog(context, doc.reference);
-                                              await _loadReceiptsForStore();
-                                            },
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                                  )),
                                 ]);
                               }).toList(),
                             ),
@@ -263,22 +200,25 @@ class _ReceiptPageState extends State<ReceiptPage> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16, right: 16),
+                      padding: const EdgeInsets.only(bottom: 16, right: 16, top: 16),
                       child: Align(
                         alignment: Alignment.bottomRight,
-                        child: SizedBox(
-                          width: 180,
-                          height: 45,
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              await Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => AddReceiptPage()),
-                              );
-                              await _loadReceiptsForStore();
-                            },
-                            child: Text('Tambah Receipt'),
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.add),
+                          onPressed: () async {
+                            await Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const AddReceiptPage()),
+                            );
+                            await _loadReceiptsForStore();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: accentOrange,
+                            foregroundColor: cleanWhite,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                           ),
+                          label: const Text('Tambah Receipt'),
                         ),
                       ),
                     ),
@@ -291,16 +231,18 @@ class _ReceiptPageState extends State<ReceiptPage> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Konfirmasi'),
-        content: Text('Yakin ingin menghapus receipt ini?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Konfirmasi'),
+        content: const Text('Yakin ingin menghapus receipt ini?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: Text('Batal'),
+            child: const Text('Batal'),
           ),
-          TextButton(
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () => Navigator.pop(context, true),
-            child: Text('Hapus', style: TextStyle(color: Colors.red)),
+            child: const Text('Hapus'),
           ),
         ],
       ),
@@ -311,14 +253,11 @@ class _ReceiptPageState extends State<ReceiptPage> {
         final receiptSnapshot = await ref.get();
         final receiptData = receiptSnapshot.data() as Map<String, dynamic>;
         final warehouseRef = receiptData['warehouse_ref'] as DocumentReference?;
-
         final detailsSnapshot = await ref.collection('details').get();
-
         for (final doc in detailsSnapshot.docs) {
           final data = doc.data();
           final productRef = data['product_ref'] as DocumentReference?;
           final qty = data['qty'] ?? 0;
-
           if (productRef != null) {
             final productSnapshot = await productRef.get();
             final productData = productSnapshot.data() as Map<String, dynamic>?;
@@ -327,15 +266,8 @@ class _ReceiptPageState extends State<ReceiptPage> {
               final updatedStock = currentStock - qty;
               await productRef.update({'stock': updatedStock});
             }
-
             if (warehouseRef != null) {
-              final wsQuery = await FirebaseFirestore.instance
-                .collection('warehouseStocks')
-                .where('product_ref', isEqualTo: productRef)
-                .where('warehouse_ref', isEqualTo: warehouseRef)
-                .limit(1)
-                .get();
-
+              final wsQuery = await FirebaseFirestore.instance.collection('warehouseStocks').where('product_ref', isEqualTo: productRef).where('warehouse_ref', isEqualTo: warehouseRef).limit(1).get();
               if (wsQuery.docs.isNotEmpty) {
                 final wsDoc = wsQuery.docs.first;
                 final wsData = wsDoc.data();
@@ -351,10 +283,12 @@ class _ReceiptPageState extends State<ReceiptPage> {
         await _loadReceiptsForStore();
       } catch (e) {
         print("Gagal menghapus receipt dan update stok: $e");
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text("Gagal menghapus receipt."),
-          backgroundColor: Colors.red,
-        ));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Gagal menghapus receipt."),
+            backgroundColor: Colors.red,
+          ));
+        }
       }
     }
   }
@@ -362,9 +296,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
 
 class ReceiptDetailsPage extends StatefulWidget {
   final DocumentReference receiptRef;
-
   const ReceiptDetailsPage({super.key, required this.receiptRef});
-
   @override
   State<ReceiptDetailsPage> createState() => _ReceiptDetailsPageState();
 }
@@ -372,6 +304,10 @@ class ReceiptDetailsPage extends StatefulWidget {
 class _ReceiptDetailsPageState extends State<ReceiptDetailsPage> {
   List<DocumentSnapshot> _allDetails = [];
   bool _loading = true;
+
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
 
   @override
   void initState() {
@@ -381,16 +317,16 @@ class _ReceiptDetailsPageState extends State<ReceiptDetailsPage> {
 
   Future<void> _loadDetails() async {
     try {
-      final detailsSnapshot =
-          await widget.receiptRef.collection('details').get();
-
-      setState(() {
-        _allDetails = detailsSnapshot.docs;
-        _loading = false;
-      });
+      final detailsSnapshot = await widget.receiptRef.collection('details').get();
+      if (mounted) {
+        setState(() {
+          _allDetails = detailsSnapshot.docs;
+          _loading = false;
+        });
+      }
     } catch (e) {
       print("Gagal memuat detail: $e");
-      setState(() => _loading = false);
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -409,37 +345,42 @@ class _ReceiptDetailsPageState extends State<ReceiptDetailsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Receipt Details')
-        ),
+      appBar: AppBar(title: const Text('Detail Penerimaan'), centerTitle: true),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : _allDetails.isEmpty
-              ? const Center(child: Text('Tidak ada detail produk.'))
+              ? Center(
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inbox_outlined, size: 80, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text('Tidak ada detail produk.', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  ],
+                ))
               : ListView.builder(
+                  padding: const EdgeInsets.all(8.0),
                   itemCount: _allDetails.length,
                   itemBuilder: (context, index) {
-                    final data =
-                        _allDetails[index].data() as Map<String, dynamic>;
+                    final data = _allDetails[index].data() as Map<String, dynamic>;
                     return Card(
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            FutureBuilder<String>(
-                              future: _getProductName(data['product_ref']),
-                              builder: (context, snapshot) {
-                                return Text(snapshot.data ?? '-');
-                              },
-                            ),
-                            Text("Qty: ${data['qty'] ?? '-'}"),
-                            Text("Unit: ${data['unit_name'] ?? '-'}"),
-                            Text("Price: ${data['price'] ?? '-'}"),
-                            Text("Subtotal: ${data['subtotal'] ?? '-'}"),
-                          ],
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      elevation: 2,
+                      color: cleanWhite,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        leading: const Icon(Icons.inventory_2_outlined, color: midnightBlue),
+                        title: FutureBuilder<String>(
+                          future: _getProductName(data['product_ref']),
+                          builder: (context, snapshot) {
+                            return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold, color: midnightBlue));
+                          },
+                        ),
+                        subtitle: Text(
+                            "Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? ''}  •  Harga: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['price'] ?? 0)}"),
+                        trailing: Text(
+                          NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['subtotal'] ?? 0),
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
                         ),
                       ),
                     );

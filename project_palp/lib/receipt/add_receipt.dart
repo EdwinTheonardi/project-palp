@@ -14,14 +14,16 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
   final _formKey = GlobalKey<FormState>();
   final _formNumberController = TextEditingController();
   DateTime? _postDate;
-
   DocumentReference? _selectedSupplier;
   DocumentReference? _selectedWarehouse;
   List<DocumentSnapshot> _suppliers = [];
   List<DocumentSnapshot> _warehouses = [];
   List<DocumentSnapshot> _products = [];
-
   final List<_DetailItem> _details = [];
+
+  static const Color midnightBlue = Color(0xFF003366);
+  static const Color accentOrange = Color(0xFFFFA500);
+  static const Color cleanWhite = Colors.white;
 
   @override
   void initState() {
@@ -34,36 +36,19 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
     try {
       final storeCode = await StoreService.getStoreCode();
       if (storeCode == null) return;
-
-      final storeQuery = await FirebaseFirestore.instance
-          .collection('stores')
-          .where('code', isEqualTo: storeCode)
-          .limit(1)
-          .get();
-
+      final storeQuery = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
       if (storeQuery.docs.isEmpty) return;
       final storeRef = storeQuery.docs.first.reference;
-
-      final supplierSnap = await FirebaseFirestore.instance
-          .collection('suppliers')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      final warehouseSnap = await FirebaseFirestore.instance
-          .collection('warehouses')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      final productSnap = await FirebaseFirestore.instance
-          .collection('products')
-          .where('store_ref', isEqualTo: storeRef)
-          .get();
-
-      setState(() {
-        _suppliers = supplierSnap.docs;
-        _warehouses = warehouseSnap.docs;
-        _products = productSnap.docs;
-      });
+      final supplierSnap = await FirebaseFirestore.instance.collection('suppliers').where('store_ref', isEqualTo: storeRef).get();
+      final warehouseSnap = await FirebaseFirestore.instance.collection('warehouses').where('store_ref', isEqualTo: storeRef).get();
+      final productSnap = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
+      if (mounted) {
+        setState(() {
+          _suppliers = supplierSnap.docs;
+          _warehouses = warehouseSnap.docs;
+          _products = productSnap.docs;
+        });
+      }
     } catch (e) {
       debugPrint('Error fetching dropdown data: $e');
     }
@@ -79,8 +64,16 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
       initialDate: _postDate ?? now,
       firstDate: DateTime(2000),
       lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: midnightBlue, onPrimary: cleanWhite, onSurface: midnightBlue),
+            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+          ),
+          child: child!,
+        );
+      },
     );
-
     if (picked != null && picked != _postDate) {
       setState(() {
         _postDate = picked;
@@ -91,21 +84,13 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
   Future<String> generateNoForm() async {
     final now = DateTime.now();
     final startOfDayLocal = DateTime(now.year, now.month, now.day);
-    final endOfDayLocal = startOfDayLocal.add(Duration(days: 1));
-
+    final endOfDayLocal = startOfDayLocal.add(const Duration(days: 1));
     final startOfDayUtc = startOfDayLocal.toUtc();
     final endOfDayUtc = endOfDayLocal.toUtc();
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('purchaseGoodsReceipts')
-        .where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc))
-        .where('created_at', isLessThan: Timestamp.fromDate(endOfDayUtc))
-        .get();
-        
+    final snapshot = await FirebaseFirestore.instance.collection('purchaseGoodsReceipts').where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc)).where('created_at', isLessThan: Timestamp.fromDate(endOfDayUtc)).get();
     final count = snapshot.docs.length;
     final newNumber = count + 1;
     final formattedNumber = newNumber.toString().padLeft(4, '0');
-
     final code = 'TTB${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$formattedNumber';
     return code;
   }
@@ -118,26 +103,14 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
   }
 
   Future<void> _saveReceipt() async {
-    if (!_formKey.currentState!.validate() ||
-        _selectedSupplier == null ||
-        _selectedWarehouse == null ||
-        _details.isEmpty ||
-        _postDate == null) {
+    if (!_formKey.currentState!.validate() || _selectedSupplier == null || _selectedWarehouse == null || _details.isEmpty || _postDate == null) {
       return;
     }
-
     final storeCode = await StoreService.getStoreCode();
     if (storeCode == null) return;
-
-    final storeQuery = await FirebaseFirestore.instance
-        .collection('stores')
-        .where('code', isEqualTo: storeCode)
-        .limit(1)
-        .get();
-
+    final storeQuery = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
     if (storeQuery.docs.isEmpty) return;
     final storeRef = storeQuery.docs.first.reference;
-
     final receipt = {
       'no_form': _formNumberController.text.trim(),
       'grandtotal': grandTotal,
@@ -149,33 +122,18 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
       'warehouse_ref': _selectedWarehouse,
       'synced': true,
     };
-
-    final receiptDoc = await FirebaseFirestore.instance
-        .collection('purchaseGoodsReceipts')
-        .add(receipt);
-
+    final receiptDoc = await FirebaseFirestore.instance.collection('purchaseGoodsReceipts').add(receipt);
     for (final detail in _details) {
       await receiptDoc.collection('details').add(detail.toMap());
-
       if (detail.productRef != null) {
         final productSnapshot = await detail.productRef!.get();
         final productData = productSnapshot.data() as Map<String, dynamic>?;
-
         if (productData != null) {
           final currentStock = productData['stock'] ?? 0;
           final updatedStock = currentStock + detail.qty;
-
           await detail.productRef!.update({'stock': updatedStock});
         }
-
-        final warehouseStockQuery = await FirebaseFirestore.instance
-          .collection('warehouseStocks')
-          .where('product_ref', isEqualTo: detail.productRef)
-          .where('warehouse_ref', isEqualTo: _selectedWarehouse)
-          .where('store_ref', isEqualTo: storeRef)
-          .limit(1)
-          .get();
-
+        final warehouseStockQuery = await FirebaseFirestore.instance.collection('warehouseStocks').where('product_ref', isEqualTo: detail.productRef).where('warehouse_ref', isEqualTo: _selectedWarehouse).where('store_ref', isEqualTo: storeRef).limit(1).get();
         if (warehouseStockQuery.docs.isEmpty) {
           await FirebaseFirestore.instance.collection('warehouseStocks').add({
             'product_ref': detail.productRef,
@@ -187,7 +145,6 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
         } else {
           final doc = warehouseStockQuery.docs.first;
           final currentQty = (doc.data()['qty'] ?? 0) as int;
-
           await doc.reference.update({
             'qty': currentQty + detail.qty,
             'last_updated_at': Timestamp.now(),
@@ -195,7 +152,6 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
         }
       }
     }
-
     if (mounted) Navigator.pop(context);
   }
 
@@ -211,12 +167,22 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
     });
   }
 
+  InputDecoration _buildInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.black.withOpacity(0.05),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Tambah Penerimaan')),
+      appBar: AppBar(title: const Text('Tambah Penerimaan'), centerTitle: true),
       body: _products.isEmpty
-          ? Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : Padding(
               padding: const EdgeInsets.all(16),
               child: Form(
@@ -228,134 +194,125 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
                       child: ListView(
                         shrinkWrap: true,
                         children: [
-                          TextFormField(
-                            controller: _formNumberController,
-                            decoration: InputDecoration(labelText: 'No. Form'),
-                            readOnly: true,
-                          ),
+                          TextFormField(controller: _formNumberController, decoration: _buildInputDecoration('No. Form'), readOnly: true),
+                          const SizedBox(height: 16),
                           DropdownButtonFormField<DocumentReference>(
-                            decoration: InputDecoration(labelText: 'Supplier'),
-                            items: _suppliers.map((doc) {
-                              return DropdownMenuItem(
-                                value: doc.reference,
-                                child: Text(doc['name']),
-                              );
-                            }).toList(),
-                            onChanged: (val) => setState(() => _selectedSupplier = val),
-                            validator: (val) => val == null ? 'Wajib dipilih' : null,
-                          ),
+                              decoration: _buildInputDecoration('Supplier'),
+                              items: _suppliers.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
+                              onChanged: (val) => setState(() => _selectedSupplier = val),
+                              validator: (val) => val == null ? 'Wajib dipilih' : null),
+                          const SizedBox(height: 16),
                           DropdownButtonFormField<DocumentReference>(
-                            decoration: InputDecoration(labelText: 'Warehouse'),
-                            items: _warehouses.map((doc) {
-                              return DropdownMenuItem(
-                                value: doc.reference,
-                                child: Text(doc['name']),
-                              );
-                            }).toList(),
-                            onChanged: (val) => setState(() => _selectedWarehouse = val),
-                            validator: (val) => val == null ? 'Wajib dipilih' : null,
-                          ),
+                              decoration: _buildInputDecoration('Warehouse'),
+                              items: _warehouses.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
+                              onChanged: (val) => setState(() => _selectedWarehouse = val),
+                              validator: (val) => val == null ? 'Wajib dipilih' : null),
+                          const SizedBox(height: 16),
                           GestureDetector(
                             onTap: _selectPostDate,
                             child: AbsorbPointer(
                               child: TextFormField(
                                 decoration: InputDecoration(
                                   labelText: 'Tanggal Penerimaan',
-                                  hintText: 'Pilih tanggal',
-                                  suffixIcon: Icon(Icons.calendar_today),
+                                  filled: true,
+                                  fillColor: Colors.black.withOpacity(0.05),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                  suffixIcon: const Icon(Icons.calendar_today),
                                 ),
                                 validator: (val) => _postDate == null ? 'Wajib dipilih' : null,
-                                controller: TextEditingController(
-                                  text: _postDate == null
-                                      ? ''
-                                      : "${_postDate!.day.toString().padLeft(2, '0')}-"
-                                        "${_postDate!.month.toString().padLeft(2, '0')}-"
-                                        "${_postDate!.year}",
-                                ),
+                                controller: TextEditingController(text: _postDate == null ? '' : DateFormat('dd MMMM yyyy').format(_postDate!)),
                               ),
                             ),
                           ),
                         ],
                       ),
                     ),
-
-                    SizedBox(width: 32), // Jarak antar kolom
-
-                    // KANAN: Detail Produk
+                    const SizedBox(width: 32),
                     Expanded(
                       flex: 2,
                       child: ListView(
                         shrinkWrap: true,
                         children: [
-                          Text('Detail Produk', style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text('Detail Produk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                           ..._details.asMap().entries.map((entry) {
                             final i = entry.key;
                             final item = entry.value;
-
                             return Card(
-                              margin: EdgeInsets.symmetric(vertical: 8),
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               child: Padding(
                                 padding: const EdgeInsets.all(12),
                                 child: Column(
                                   children: [
                                     DropdownButtonFormField<DocumentReference>(
-                                      value: item.productRef,
-                                      items: _products.map((doc) {
-                                        return DropdownMenuItem(
-                                          value: doc.reference,
-                                          child: Text(doc['name']),
-                                        );
-                                      }).toList(),
-                                      onChanged: (value) => setState(() {
-                                        item.productRef = value;
-                                        item.updatePriceFromProduct();
-                                        item.unitName = 'pcs';
-                                      }),
-                                      decoration: InputDecoration(labelText: "Produk"),
-                                      validator: (value) => value == null ? 'Pilih produk' : null,
-                                    ),
+                                        value: item.productRef,
+                                        items: _products.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
+                                        onChanged: (value) => setState(() {
+                                              item.productRef = value;
+                                              item.updatePriceFromProduct();
+                                              item.unitName = 'pcs';
+                                            }),
+                                        decoration: _buildInputDecoration("Produk"),
+                                        validator: (value) => value == null ? 'Pilih produk' : null),
+                                    const SizedBox(height: 12),
                                     TextFormField(
-                                      controller: item.priceController,
-                                      decoration: InputDecoration(labelText: "Harga"),
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (val) => setState(() {
-                                        item.price = int.tryParse(val) ?? 0;
-                                      }),
-                                      validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
-                                    ),
+                                        controller: item.priceController,
+                                        decoration: _buildInputDecoration("Harga"),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (val) => setState(() => item.price = int.tryParse(val) ?? 0),
+                                        validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
+                                    const SizedBox(height: 12),
                                     TextFormField(
-                                      initialValue: item.qty.toString(),
-                                      decoration: InputDecoration(labelText: "Jumlah"),
-                                      keyboardType: TextInputType.number,
-                                      onChanged: (val) => setState(() => item.qty = int.tryParse(val) ?? 1),
-                                      validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
+                                        controller: item.qtyController,
+                                        decoration: _buildInputDecoration("Jumlah"),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (val) => setState(() => item.qty = int.tryParse(val) ?? 1),
+                                        validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(left: 12.0),
+                                        child: Text("Subtotal: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(item.subtotal)}", style: const TextStyle(fontWeight: FontWeight.w500)),
+                                      ),
                                     ),
-                                    SizedBox(height: 8),
-                                    Text("Satuan: ${item.unitName}"),
-                                    Text("Subtotal: ${item.subtotal}"),
                                     TextButton.icon(
                                       onPressed: () => _removeDetail(i),
-                                      icon: Icon(Icons.delete, color: Colors.red),
-                                      label: Text("Hapus"),
+                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                      label: const Text("Hapus", style: TextStyle(color: Colors.red)),
                                     ),
                                   ],
                                 ),
                               ),
                             );
                           }).toList(),
+                          const SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: _addDetail,
-                            icon: Icon(Icons.add),
-                            label: Text('Tambah Produk'),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Tambah Produk'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.grey[200],
+                              foregroundColor: Colors.black,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
                           ),
-                          SizedBox(height: 16),
-                          Text("Item Total: $itemTotal"),
-                          Text("Grand Total: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp. ', decimalDigits: 0).format(grandTotal)}"),
-                          SizedBox(height: 24),
+                          const SizedBox(height: 16),
+                          Text("Item Total: $itemTotal", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          Text("Grand Total: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(grandTotal)}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: midnightBlue)),
+                          const SizedBox(height: 24),
                           ElevatedButton(
-                            onPressed: _saveReceipt,
-                            child: Text("Simpan Receipt"),
-                          ),
+                              onPressed: _saveReceipt,
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: accentOrange,
+                                  foregroundColor: cleanWhite,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                              child: const Text("Simpan Receipt")),
                         ],
                       ),
                     ),
@@ -373,7 +330,6 @@ class _DetailItem {
   int qty = 1;
   String unitName = 'unit';
   final List<DocumentSnapshot> products;
-
   final TextEditingController priceController = TextEditingController();
   final TextEditingController qtyController = TextEditingController(text: '1');
 
@@ -384,7 +340,7 @@ class _DetailItem {
     final productDoc = products.firstWhere((doc) => doc.reference == productRef);
     final data = productDoc.data() as Map<String, dynamic>;
     price = data['price'] ?? 0;
-    priceController.text = price.toString(); // Update controller
+    priceController.text = price.toString();
   }
 
   int get subtotal => price * qty;
