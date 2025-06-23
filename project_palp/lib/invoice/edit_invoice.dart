@@ -1,34 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../services/store_service.dart';
 import 'package:dropdown_search/dropdown_search.dart';
-import 'package:intl/intl.dart';
 
-class EditReceiptPage extends StatefulWidget {
-  final DocumentReference receiptRef;
+class EditInvoicePage extends StatefulWidget {
+  final DocumentReference invoiceRef;
 
-  const EditReceiptPage({super.key, required this.receiptRef});
+  const EditInvoicePage({super.key, required this.invoiceRef});
 
   @override
-  State<EditReceiptPage> createState() => _EditReceiptPageState();
+  State<EditInvoicePage> createState() => _EditInvoicePageState();
 }
 
-class _EditReceiptPageState extends State<EditReceiptPage> {
+class _EditInvoicePageState extends State<EditInvoicePage> {
   final _formKey = GlobalKey<FormState>();
   final _formNumberController = TextEditingController();
+  final _shippingCostController = TextEditingController();
   final _postDateController = TextEditingController();
+  final _dueDateController = TextEditingController();
 
-  DocumentReference? _selectedSupplier;
-  DocumentReference? _selectedWarehouse;
-  List<DocumentSnapshot> _suppliers = [];
-  List<DocumentSnapshot> _warehouses = [];
+  DateTime? _postDate;
+  DateTime? _dueDate;
+  String? _selectedPaymentType;
+
   List<DocumentSnapshot> _products = [];
-
+  final List<String> _paymentType = ['Cash', 'N/15', 'N/30', 'N/60', 'N/90'];
   final List<_DetailItem> _details = [];
 
   bool _loading = true;
-  DateTime? _postDate;
-
+  
   static const Color midnightBlue = Color(0xFF003366);
   static const Color accentOrange = Color(0xFFFFA500);
   static const Color cleanWhite = Colors.white;
@@ -40,50 +41,52 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
     _loadData();
   }
 
-  @override
-  void dispose() {
-    _formNumberController.dispose();
-    _postDateController.dispose();
-    for (var detail in _details) {
-      detail.dispose();
-    }
-    super.dispose();
-  }
-
   Future<void> _loadData() async {
     try {
-      final receiptSnap = await widget.receiptRef.get();
-      if (!receiptSnap.exists) {
-        if (mounted) setState(() => _loading = false);
+      final invoiceSnap = await widget.invoiceRef.get();
+      if (!invoiceSnap.exists) {
+         if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final invoiceData = invoiceSnap.data() as Map<String, dynamic>;
+
+      final storeCode = await StoreService.getStoreCode();
+      if (storeCode == null) {
+         if (mounted) setState(() => _loading = false);
         return;
       }
 
-      final receiptData = receiptSnap.data() as Map<String, dynamic>;
-      final storeCode = await StoreService.getStoreCode();
-      if (storeCode == null) {
-        if (mounted) setState(() => _loading = false);
-        return;
-      }
-      final storeQuery = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
+      final storeQuery = await FirebaseFirestore.instance
+          .collection('stores')
+          .where('code', isEqualTo: storeCode)
+          .limit(1)
+          .get();
       if (storeQuery.docs.isEmpty) {
         if (mounted) setState(() => _loading = false);
         return;
       }
       final storeRef = storeQuery.docs.first.reference;
-      final supplierSnap = await FirebaseFirestore.instance.collection('suppliers').where('store_ref', isEqualTo: storeRef).get();
-      final warehouseSnap = await FirebaseFirestore.instance.collection('warehouses').where('store_ref', isEqualTo: storeRef).get();
-      final productSnap = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
-      final detailsSnap = await widget.receiptRef.collection('details').get();
 
-      if (mounted) {
+      final productSnap = await FirebaseFirestore.instance
+          .collection('products')
+          .where('store_ref', isEqualTo: storeRef)
+          .get();
+
+      final detailsSnap = await widget.invoiceRef.collection('details').get();
+
+      if(mounted) {
         setState(() {
-          _formNumberController.text = receiptData['no_form'] ?? '';
-          _selectedSupplier = receiptData['supplier_ref'];
-          _selectedWarehouse = receiptData['warehouse_ref'];
-          _postDate = (receiptData['post_date'] as Timestamp).toDate();
+          _formNumberController.text = invoiceData['invoice_number'] ?? '';
+          _shippingCostController.text = (invoiceData['shipping_cost'] ?? 0).toString();
+          _selectedPaymentType = invoiceData['payment_type'];
+          _postDate = (invoiceData['post_date'] as Timestamp).toDate();
           _postDateController.text = DateFormat('dd-MM-yyyy').format(_postDate!);
-          _suppliers = supplierSnap.docs;
-          _warehouses = warehouseSnap.docs;
+          
+          if(invoiceData['due_date'] != null) {
+            _dueDate = (invoiceData['due_date'] as Timestamp).toDate();
+            _dueDateController.text = DateFormat('dd-MM-yyyy').format(_dueDate!);
+          }
+
           _products = productSnap.docs;
           _details.clear();
           for (var doc in detailsSnap.docs) {
@@ -101,17 +104,29 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
         });
       }
     } catch (e) {
-      debugPrint('Error loading receipt data: $e');
-      if (mounted) {
-        setState(() => _loading = false);
-      }
+      debugPrint('Error loading invoice: $e');
+      if(mounted) setState(() => _loading = false);
     }
   }
 
-  int get itemTotal => _details.fold(0, (sum, item) => sum + item.qty);
-  int get grandTotal => _details.fold(0, (sum, item) => sum + item.subtotal);
+  void _updateDueDate() {
+    if (_postDate == null || _selectedPaymentType == null) {
+      _dueDateController.clear();
+      return;
+    };
+    int days = 0;
+    switch (_selectedPaymentType) {
+      case 'N/15': days = 15; break;
+      case 'N/30': days = 30; break;
+      case 'N/60': days = 60; break;
+      case 'N/90': days = 90; break;
+      default: days = 0;
+    }
+    _dueDate = _postDate!.add(Duration(days: days));
+    _dueDateController.text = DateFormat('dd-MM-yyyy').format(_dueDate!);
+  }
 
-  Future<void> _selectPostDate() async {
+   Future<void> _selectPostDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
@@ -128,53 +143,46 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
         );
       },
     );
+
     if (picked != null) {
       setState(() {
         _postDate = picked;
         _postDateController.text = DateFormat('dd-MM-yyyy').format(picked);
+        _updateDueDate();
       });
     }
   }
 
-  Future<void> _updateReceipt() async {
-    if (!_formKey.currentState!.validate() || _selectedSupplier == null || _selectedWarehouse == null || _details.isEmpty || _postDate == null) {
-      return;
-    }
-    final detailCollection = widget.receiptRef.collection('details');
+  int get itemTotal => _details.fold(0, (sum, item) => sum + item.qty);
+  int get grandTotal => _details.fold(0, (sum, item) => sum + item.subtotal) + (int.tryParse(_shippingCostController.text) ?? 0);
+
+  Future<void> _updateInvoice() async {
+    if (!_formKey.currentState!.validate() || _details.isEmpty || _postDate == null) return;
+
+    final detailCollection = widget.invoiceRef.collection('details');
+
     final oldDetails = await detailCollection.get();
     for (var doc in oldDetails.docs) {
-      final data = doc.data();
-      final productRef = data['product_ref'] as DocumentReference;
-      final qty = data['qty'] as int;
-      await FirebaseFirestore.instance.runTransaction((transaction) async {
-        final productSnap = await transaction.get(productRef);
-        if (!productSnap.exists) return;
-        final currentStock = productSnap.get('stock') ?? 0;
-        transaction.update(productRef, {'stock': currentStock - qty});
-      });
       await doc.reference.delete();
     }
+
     final updatedData = {
-      'no_form': _formNumberController.text.trim(),
+      'invoice_number': _formNumberController.text.trim(),
       'grandtotal': grandTotal,
       'item_total': itemTotal,
-      'supplier_ref': _selectedSupplier,
-      'warehouse_ref': _selectedWarehouse,
+      'payment_type': _selectedPaymentType,
       'post_date': Timestamp.fromDate(_postDate!),
+      'due_date': _dueDate != null ? Timestamp.fromDate(_dueDate!) : null,
+      'shipping_cost': int.tryParse(_shippingCostController.text) ?? 0,
       'updated_at': DateTime.now(),
     };
-    await widget.receiptRef.update(updatedData);
+
+    await widget.invoiceRef.update(updatedData);
+
     for (final detail in _details) {
       await detailCollection.add(detail.toMap());
-      if (detail.productRef != null) {
-        await FirebaseFirestore.instance.runTransaction((transaction) async {
-          final productSnap = await transaction.get(detail.productRef!);
-          if (!productSnap.exists) return;
-          final currentStock = productSnap.get('stock') ?? 0;
-          transaction.update(detail.productRef!, {'stock': currentStock + detail.qty});
-        });
-      }
     }
+
     if (mounted) Navigator.pop(context);
   }
 
@@ -186,21 +194,33 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
 
   void _removeDetail(int index) {
     setState(() {
+      _details[index].dispose();
       _details.removeAt(index);
     });
   }
 
-  InputDecoration _inputDecoration(String label) {
+  @override
+  void dispose() {
+    _formNumberController.dispose();
+    _shippingCostController.dispose();
+    _postDateController.dispose();
+    _dueDateController.dispose();
+    for (var detail in _details) {
+      detail.dispose();
+    }
+    super.dispose();
+  }
+  
+  InputDecoration _buildInputDecoration(String label, {IconData? icon, Widget? suffixIcon}) {
     return InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: midnightBlue.withOpacity(0.8)),
+        prefixIcon: icon != null ? Icon(icon, color: midnightBlue.withOpacity(0.7), size: 20) : null,
+        suffixIcon: suffixIcon,
         filled: true,
         fillColor: Colors.black.withOpacity(0.05),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: accentOrange))
     );
   }
@@ -210,7 +230,7 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
     return Scaffold(
       backgroundColor: lightGray,
       appBar: AppBar(
-        title: const Text('Edit Penerimaan'),
+        title: const Text('Edit Invoice'),
         centerTitle: true,
         backgroundColor: midnightBlue,
         foregroundColor: cleanWhite,
@@ -220,8 +240,8 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
         padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
         child: ElevatedButton.icon(
           icon: const Icon(Icons.save_as_outlined),
-          label: const Text("Update Penerimaan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          onPressed: _updateReceipt,
+          label: const Text("Update Invoice", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: _updateInvoice,
           style: ElevatedButton.styleFrom(
             backgroundColor: accentOrange,
             foregroundColor: cleanWhite,
@@ -244,12 +264,11 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextFormField(
                       controller: _formNumberController,
-                      decoration: _inputDecoration('No. Form'),
-                      validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
+                      readOnly: true,
+                      decoration: _buildInputDecoration('No. Faktur', icon: Icons.numbers_outlined),
                     ),
                     const SizedBox(height: 16),
                     GestureDetector(
@@ -257,48 +276,43 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
                       child: AbsorbPointer(
                         child: TextFormField(
                           controller: _postDateController,
-                          decoration: _inputDecoration('Tanggal Penerimaan').copyWith(suffixIcon: const Icon(Icons.calendar_today, color: midnightBlue)),
-                          validator: (val) => val == null || val.isEmpty ? 'Wajib dipilih' : null,
+                          decoration: _buildInputDecoration('Tanggal Faktur', icon: Icons.calendar_today_outlined),
+                          validator: (_) => _postDate == null ? 'Wajib dipilih' : null,
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
-                    DropdownSearch<DocumentSnapshot>(
-                      items: _suppliers,
-                      itemAsString: (doc) => doc['name'],
-                      selectedItem: _suppliers.any((doc) => doc.reference == _selectedSupplier) ? _suppliers.firstWhere((doc) => doc.reference == _selectedSupplier) : null,
-                      dropdownDecoratorProps: DropDownDecoratorProps(
-                        dropdownSearchDecoration: _inputDecoration('Supplier'),
-                      ),
-                      onChanged: (doc) => setState(() => _selectedSupplier = doc?.reference),
+                    DropdownButtonFormField<String>(
+                      decoration: _buildInputDecoration('Tipe Pembayaran', icon: Icons.payment_outlined),
+                      value: _selectedPaymentType,
+                      items: _paymentType.map((type) {
+                        return DropdownMenuItem(value: type, child: Text(type));
+                      }).toList(),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedPaymentType = val;
+                          _updateDueDate();
+                        });
+                      },
                       validator: (val) => val == null ? 'Wajib dipilih' : null,
-                      popupProps: PopupProps.menu(
-                        showSearchBox: true,
-                        searchFieldProps: TextFieldProps(decoration: _inputDecoration('Cari supplier...')),
-                        containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget),
-                      ),
                     ),
                     const SizedBox(height: 16),
-                    DropdownSearch<DocumentSnapshot>(
-                      items: _warehouses,
-                      itemAsString: (doc) => doc['name'],
-                      selectedItem: _warehouses.any((doc) => doc.reference == _selectedWarehouse) ? _warehouses.firstWhere((doc) => doc.reference == _selectedWarehouse) : null,
-                      dropdownDecoratorProps: DropDownDecoratorProps(
-                        dropdownSearchDecoration: _inputDecoration('Warehouse'),
-                      ),
-                      onChanged: (doc) => setState(() => _selectedWarehouse = doc?.reference),
-                      validator: (val) => val == null ? 'Wajib dipilih' : null,
-                      popupProps: PopupProps.menu(
-                        showSearchBox: true,
-                        searchFieldProps: TextFieldProps(decoration: _inputDecoration('Cari warehouse...')),
-                        containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget),
-                      ),
+                    TextFormField(
+                      controller: _dueDateController,
+                      readOnly: true,
+                      decoration: _buildInputDecoration('Jatuh Tempo', icon: Icons.event_busy_outlined),
+                    ),
+                     const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _shippingCostController,
+                      decoration: _buildInputDecoration('Biaya Pengiriman', icon: Icons.local_shipping_outlined),
+                      keyboardType: TextInputType.number,
+                      onChanged: (value) => setState((){}), 
                     ),
                   ],
                 ),
               ),
             ),
-
             const SizedBox(height: 24),
             Text('Detail Produk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: midnightBlue)),
             const SizedBox(height: 4),
@@ -312,36 +326,35 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
                 elevation: 2,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(12.0),
                   child: Column(
                     children: [
                       DropdownSearch<DocumentReference>(
                         items: _products.map((doc) => doc.reference).toList(),
                         selectedItem: item.productRef,
                         itemAsString: (ref) {
-                          final product = _products.where((doc) => doc.reference == ref);
-                          return product.isNotEmpty ? product.first['name'] : '';
+                          final found = _products.where((doc) => doc.reference == ref);
+                          return found.isNotEmpty ? found.first['name'] : '';
                         },
-                        dropdownDecoratorProps: DropDownDecoratorProps(
-                          dropdownSearchDecoration: _inputDecoration('Produk'),
-                        ),
+                        dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration("Produk")),
                         onChanged: (ref) {
                           setState(() {
                             item.productRef = ref;
+                            item.updatePriceFromProduct();
                             item.unitName = 'pcs';
                           });
                         },
                         validator: (val) => val == null ? 'Pilih produk' : null,
                         popupProps: PopupProps.menu(
                           showSearchBox: true,
-                          searchFieldProps: TextFieldProps(decoration: _inputDecoration('Cari produk...')),
-                          containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget),
+                          searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari produk...')),
+                           containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget),
                         ),
                       ),
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: item.priceController,
-                        decoration: _inputDecoration("Harga"),
+                        decoration: _buildInputDecoration("Harga"),
                         keyboardType: TextInputType.number,
                         onChanged: (val) => setState(() => item.price = int.tryParse(val) ?? 0),
                         validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
@@ -349,13 +362,13 @@ class _EditReceiptPageState extends State<EditReceiptPage> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: item.qtyController,
-                        decoration: _inputDecoration("Jumlah"),
+                        decoration: _buildInputDecoration("Jumlah"),
                         keyboardType: TextInputType.number,
                         onChanged: (val) => setState(() => item.qty = int.tryParse(val) ?? 1),
                         validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null,
                       ),
                       const SizedBox(height: 8),
-                      Row(
+                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Padding(
@@ -407,6 +420,7 @@ class _DetailItem {
   String unitName;
   String? docId;
   final List<DocumentSnapshot> products;
+
   final TextEditingController priceController;
   final TextEditingController qtyController;
 
@@ -420,11 +434,6 @@ class _DetailItem {
   })  : priceController = TextEditingController(text: price.toString()),
         qtyController = TextEditingController(text: qty.toString());
 
-  void dispose() {
-    priceController.dispose();
-    qtyController.dispose();
-  }
-
   int get subtotal => price * qty;
 
   Map<String, dynamic> toMap() {
@@ -435,5 +444,18 @@ class _DetailItem {
       'unit_name': unitName,
       'subtotal': subtotal,
     };
+  }
+
+  void updatePriceFromProduct() {
+    if (productRef == null) return;
+    final productDoc = products.firstWhere((doc) => doc.reference == productRef);
+    final data = productDoc.data() as Map<String, dynamic>;
+    price = data['price'] ?? 0;
+    priceController.text = price.toString();
+  }
+
+  void dispose() {
+    priceController.dispose();
+    qtyController.dispose();
   }
 }

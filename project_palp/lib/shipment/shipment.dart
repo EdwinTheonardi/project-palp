@@ -68,14 +68,13 @@ class _ShipmentPageState extends State<ShipmentPage> {
               : _allShipments.isEmpty
                   ? Center(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.local_shipping_outlined, size: 80, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          const Text('Tidak ada data pengiriman', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                        ],
-                      ),
-                    )
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.local_shipping_outlined, size: 80, color: Colors.grey[400]),
+                        const SizedBox(height: 16),
+                        const Text('Tidak ada data pengiriman', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                      ],
+                    ))
                   : RefreshIndicator(
                       onRefresh: _loadShipmentsForStore,
                       color: accentOrange,
@@ -93,97 +92,85 @@ class _ShipmentPageState extends State<ShipmentPage> {
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
-                              child: Table(
-                                columnWidths: const {
-                                  0: FlexColumnWidth(1),
-                                  1: FlexColumnWidth(1),
-                                },
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  TableRow(
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      TableCell(
-                                        child: Padding(
-                                          padding: const EdgeInsets.only(bottom: 8.0),
-                                          child: Text(
-                                            'No Form: ${shipment['no_form'] ?? '-'}',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                              color: midnightBlue,
-                                            ),
+                                      Expanded(
+                                        child: Text(
+                                          'No Form: ${shipment['no_form'] ?? '-'}',
+                                          style: const TextStyle(
+                                            fontSize: 17,
+                                            fontWeight: FontWeight.bold,
+                                            color: midnightBlue,
                                           ),
                                         ),
                                       ),
-                                      TableCell(
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          children: [
-                                            IconButton(
-                                              icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600]),
-                                              tooltip: "Edit Shipment",
-                                              onPressed: () async {
-                                                await Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (context) => EditShipmentPage(shipmentRef: _allShipments[index].reference),
-                                                  ),
-                                                );
-                                                await _loadShipmentsForStore();
-                                              },
-                                            ),
-                                            IconButton(
-                                              icon: Icon(Icons.delete_outline, color: Colors.redAccent[400]),
-                                              tooltip: "Hapus Shipment",
-                                              onPressed: () async {
-                                                _showDeleteConfirmationDialog(context, _allShipments[index].reference);
-                                              },
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  TableRow(
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                      Row(
                                         children: [
-                                          Text('Nama Penerima: ${shipment['receiver_name'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
-                                          Text('Item Total: ${shipment['item_total'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
-                                        ],
-                                      ),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text('Created At: ${shipment['created_at'] != null ? DateFormat('dd/MM/yy HH:mm').format(shipment['created_at'].toDate()) : '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                                          Text('Post Date: ${shipment['post_date'] ?? '-'}', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                  TableRow(
-                                    children: [
-                                      const TableCell(child: SizedBox()),
-                                      TableCell(
-                                        child: Align(
-                                          alignment: Alignment.bottomRight,
-                                          child: TextButton(
-                                            style: TextButton.styleFrom(foregroundColor: accentOrange),
+                                          IconButton(
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.all(4),
+                                            tooltip: "Edit Shipment",
+                                            icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600], size: 20),
                                             onPressed: () async {
                                               await Navigator.push(
                                                 context,
                                                 MaterialPageRoute(
-                                                  builder: (context) => ShipmentDetailsPage(shipmentRef: _allShipments[index].reference),
+                                                  builder: (context) => EditShipmentPage(
+                                                    shipmentRef: _allShipments[index].reference,
+                                                  ),
                                                 ),
                                               );
                                               await _loadShipmentsForStore();
                                             },
-                                            child: const Text("Lihat Detail"),
                                           ),
-                                        ),
-                                      ),
+                                          const SizedBox(width: 12),
+                                          IconButton(
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.all(4),
+                                            tooltip: "Hapus Shipment",
+                                            icon: Icon(Icons.delete_outline, color: Colors.redAccent[400], size: 20),
+                                            onPressed: () async {
+                                              _showDeleteConfirmationDialog(
+                                                context,
+                                                _allShipments[index].reference,
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      )
                                     ],
                                   ),
+                                  const Divider(height: 20),
+                                  Text('Nama Penerima: ${shipment['receiver_name'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
+                                  Text('Item Total: ${shipment['item_total'] ?? '-'}', style: TextStyle(color: Colors.grey[800])),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('Post Date: ${shipment['post_date'] != null ? DateFormat('dd MMM yyyy').format((shipment['post_date'] as Timestamp).toDate()) : '-'}',
+                                          style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                      TextButton(
+                                        style: TextButton.styleFrom(foregroundColor: accentOrange),
+                                        onPressed: () async {
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => ShipmentDetailsPage(
+                                                shipmentRef: _allShipments[index].reference,
+                                              ),
+                                            ),
+                                          );
+                                          await _loadShipmentsForStore();
+                                        },
+                                        child: const Text("Lihat Detail"),
+                                      ),
+                                    ],
+                                  )
                                 ],
                               ),
                             ),
@@ -196,6 +183,7 @@ class _ShipmentPageState extends State<ShipmentPage> {
             right: 16,
             child: ElevatedButton.icon(
               icon: const Icon(Icons.add),
+              label: const Text('Tambah Pengiriman'),
               onPressed: () async {
                 await Navigator.push(
                   context,
@@ -209,7 +197,6 @@ class _ShipmentPageState extends State<ShipmentPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              label: const Text('Tambah Shipment'),
             ),
           ),
         ],
@@ -223,14 +210,14 @@ class _ShipmentPageState extends State<ShipmentPage> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Konfirmasi'),
-        content: const Text('Yakin ingin menghapus shipment ini?'),
+        content: const Text('Yakin ingin menghapus pengiriman ini?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Batal'),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: cleanWhite),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Hapus'),
           ),
@@ -350,17 +337,17 @@ class _ShipmentDetailsPageState extends State<ShipmentDetailsPage> {
                       elevation: 2,
                       color: cleanWhite,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: ListTile(
-                          leading: const Icon(Icons.inventory_2_outlined, color: midnightBlue),
-                          title: FutureBuilder<String>(
-                            future: _getProductName(data['product_ref']),
-                            builder: (context, snapshot) {
-                              return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold, color: midnightBlue));
-                            },
-                          ),
-                          subtitle: Text("Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? '-'}", style: TextStyle(color: Colors.grey[700])),
+                      child: ListTile(
+                        leading: const Icon(Icons.inventory_2_outlined, color: midnightBlue),
+                        title: FutureBuilder<String>(
+                          future: _getProductName(data['product_ref']),
+                          builder: (context, snapshot) {
+                            return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold));
+                          },
+                        ),
+                        trailing: Text(
+                          "Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? '-'}",
+                          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
                         ),
                       ),
                     );

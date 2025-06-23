@@ -14,11 +14,13 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
   final _formKey = GlobalKey<FormState>();
   final _formNumberController = TextEditingController();
   final _formReceiverNameController = TextEditingController();
-  final _formPostDateController = TextEditingController();
+  final _postDateController = TextEditingController();
   List<DocumentSnapshot> _products = [];
   final List<_DetailItem> _details = [];
   bool _loading = true;
+  DateTime? _postDate;
 
+  static const Color midnightBlue = Color(0xFF003366);
   static const Color accentOrange = Color(0xFFFFA500);
   static const Color cleanWhite = Colors.white;
 
@@ -40,27 +42,55 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
       final storeRef = storeQuery.docs.first.reference;
       final productSnap = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
       final detailsSnap = await widget.shipmentRef.collection('details').get();
-      setState(() {
-        _formNumberController.text = shipmentData['no_form'] ?? '';
-        _formReceiverNameController.text = shipmentData['receiver_name'] ?? '';
-        _formPostDateController.text = shipmentData['post_date'] ?? '';
-        _products = productSnap.docs;
-        _details.clear();
-        for (var doc in detailsSnap.docs) {
-          final data = doc.data();
-          _details.add(_DetailItem(products: _products, productRef: data['product_ref'], qty: data['qty'], unitName: data['unit_name'], docId: doc.id));
-        }
-        _loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _formNumberController.text = shipmentData['no_form'] ?? '';
+          _formReceiverNameController.text = shipmentData['receiver_name'] ?? '';
+          _postDate = (shipmentData['post_date'] as Timestamp).toDate();
+          _postDateController.text = DateFormat('dd-MM-yyyy').format(_postDate!);
+          _products = productSnap.docs;
+          _details.clear();
+          for (var doc in detailsSnap.docs) {
+            final data = doc.data();
+            _details.add(_DetailItem(products: _products, productRef: data['product_ref'], qty: data['qty'], unitName: data['unit_name'], docId: doc.id));
+          }
+          _loading = false;
+        });
+      }
     } catch (e) {
-      debugPrint('Error loading receipt data: $e');
+      debugPrint('Error loading shipment data: $e');
+    }
+  }
+
+  Future<void> _selectPostDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _postDate ?? now,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            colorScheme: const ColorScheme.light(primary: midnightBlue, onPrimary: cleanWhite, onSurface: midnightBlue),
+            buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _postDate = picked;
+        _postDateController.text = DateFormat('dd-MM-yyyy').format(picked);
+      });
     }
   }
 
   int get itemTotal => _details.fold(0, (sum, item) => sum + item.qty);
 
   Future<void> _updateShipment() async {
-    if (!_formKey.currentState!.validate() || _details.isEmpty) {
+    if (!_formKey.currentState!.validate() || _details.isEmpty || _postDate == null) {
       return;
     }
     final detailCollection = widget.shipmentRef.collection('details');
@@ -80,7 +110,7 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
     final updatedData = {
       'no_form': _formNumberController.text.trim(),
       'receiver_name': _formReceiverNameController.text.trim(),
-      'post_date': _formPostDateController.text.trim(),
+      'post_date': Timestamp.fromDate(_postDate!),
       'item_total': itemTotal,
       'updated_at': DateTime.now(),
     };
@@ -113,17 +143,32 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
 
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Colors.black.withOpacity(0.05),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none));
+      labelText: label,
+      filled: true,
+      fillColor: Colors.black.withOpacity(0.05),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Edit Pengiriman'), centerTitle: true),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.save_alt_outlined),
+          label: const Text("Update Pengiriman", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: _updateShipment,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: accentOrange,
+            foregroundColor: cleanWhite,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : Padding(
@@ -148,10 +193,23 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
                               decoration: _buildInputDecoration('Nama Penerima'),
                               validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
                           const SizedBox(height: 16),
-                          TextFormField(
-                              controller: _formPostDateController,
-                              decoration: _buildInputDecoration('Tanggal'),
-                              validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
+                          GestureDetector(
+                            onTap: _selectPostDate,
+                            child: AbsorbPointer(
+                              child: TextFormField(
+                                controller: _postDateController,
+                                decoration: InputDecoration(
+                                  labelText: 'Tanggal Pengiriman',
+                                  suffixIcon: const Icon(Icons.calendar_today),
+                                  filled: true,
+                                  fillColor: Colors.black.withOpacity(0.05),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                ),
+                                validator: (val) => val == null || val.isEmpty ? 'Wajib dipilih' : null,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -167,6 +225,7 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
                             final i = entry.key;
                             final item = entry.value;
                             return Card(
+                              color: cleanWhite,
                               margin: const EdgeInsets.symmetric(vertical: 8),
                               elevation: 1,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -193,29 +252,23 @@ class _EditShipmentPageState extends State<EditShipmentPage> {
                                     const SizedBox(height: 8),
                                     Text("Satuan: ${item.unitName}"),
                                     TextButton.icon(
-                                        onPressed: () => _removeDetail(i),
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        label: const Text("Hapus", style: TextStyle(color: Colors.red))),
+                                      onPressed: () => _removeDetail(i),
+                                      icon: const Icon(Icons.delete, color: Colors.red),
+                                      label: const Text("Hapus"),
+                                    ),
                                   ],
                                 ),
                               ),
                             );
                           }).toList(),
+                          const SizedBox(height: 8),
                           ElevatedButton.icon(
                               onPressed: _addDetail,
                               icon: const Icon(Icons.add),
                               label: const Text('Tambah Produk'),
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[200], foregroundColor: Colors.black, elevation: 0)),
                           const SizedBox(height: 16),
-                          Text("Item Total: $itemTotal", style: const TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                              onPressed: _updateShipment,
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: accentOrange,
-                                  foregroundColor: cleanWhite,
-                                  padding: const EdgeInsets.symmetric(vertical: 16)),
-                              child: const Text("Update Shipment")),
+                          Text("Item Total: $itemTotal", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
                       ),
                     ),
@@ -233,8 +286,20 @@ class _DetailItem {
   String unitName;
   String? docId;
   final List<DocumentSnapshot> products;
-  _DetailItem({required this.products, this.productRef, this.qty = 1, this.unitName = 'unit', this.docId});
+
+  _DetailItem({
+    required this.products,
+    this.productRef,
+    this.qty = 1,
+    this.unitName = 'unit',
+    this.docId,
+  });
+
   Map<String, dynamic> toMap() {
-    return {'product_ref': productRef, 'qty': qty, 'unit_name': unitName};
+    return {
+      'product_ref': productRef,
+      'qty': qty,
+      'unit_name': unitName,
+    };
   }
 }

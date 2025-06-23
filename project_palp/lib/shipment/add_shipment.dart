@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import '../services/store_service.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class AddShipmentPage extends StatefulWidget {
   const AddShipmentPage({super.key});
@@ -14,11 +15,12 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
   final _formKey = GlobalKey<FormState>();
   final _formNumberController = TextEditingController();
   final _formReceiverNameController = TextEditingController();
-  final _formPostDateController = TextEditingController();
+  final _postDateController = TextEditingController();
   DateTime? _postDate;
   List<DocumentSnapshot> _products = [];
   List<DocumentSnapshot> _warehouses = [];
   final List<_DetailItem> _details = [];
+  bool _isLoading = true;
 
   static const Color midnightBlue = Color(0xFF003366);
   static const Color accentOrange = Color(0xFFFFA500);
@@ -27,8 +29,22 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
   @override
   void initState() {
     super.initState();
-    _fetchDropdownData();
-    _setInitialNoForm();
+    _initializePage();
+  }
+
+  Future<void> _initializePage() async {
+    await _fetchDropdownData();
+    await _setInitialNoForm();
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _postDate = DateTime.now();
+        _updatePostDateController();
+        if (_products.isNotEmpty) {
+          _addDetail();
+        }
+      });
+    }
   }
 
   Future<void> _fetchDropdownData() async {
@@ -40,16 +56,22 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
       final storeRef = storeQuery.docs.first.reference;
       final productSnap = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
       final warehouseSnap = await FirebaseFirestore.instance.collection('warehouses').where('store_ref', isEqualTo: storeRef).get();
-      setState(() {
-        _products = productSnap.docs;
-        _warehouses = warehouseSnap.docs;
-      });
+      if (mounted) {
+        setState(() {
+          _products = productSnap.docs;
+          _warehouses = warehouseSnap.docs;
+        });
+      }
     } catch (e) {
       debugPrint('Error fetching dropdown data: $e');
     }
   }
 
   int get itemTotal => _details.fold(0, (sum, item) => sum + item.qty);
+
+  void _updatePostDateController() {
+    _postDateController.text = _postDate == null ? '' : DateFormat('dd-MM-yyyy').format(_postDate!);
+  }
 
   Future<void> _selectPostDate() async {
     final now = DateTime.now();
@@ -68,11 +90,10 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
         );
       },
     );
-
-    if (picked != null && picked != _postDate) {
+    if (picked != null) {
       setState(() {
         _postDate = picked;
-        _formPostDateController.text = DateFormat('dd/MM/yyyy').format(picked);
+        _updatePostDateController();
       });
     }
   }
@@ -83,29 +104,25 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
     final endOfDayLocal = startOfDayLocal.add(const Duration(days: 1));
     final startOfDayUtc = startOfDayLocal.toUtc();
     final endOfDayUtc = endOfDayLocal.toUtc();
-    final snapshot = await FirebaseFirestore.instance
-        .collection('salesGoodsShipment')
-        .where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc))
-        .where('created_at', isLessThan: Timestamp.fromDate(endOfDayUtc))
-        .get();
+    final snapshot = await FirebaseFirestore.instance.collection('salesGoodsShipment').where('created_at', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDayUtc)).where('created_at', isLessThan: Timestamp.fromDate(endOfDayUtc)).get();
     final count = snapshot.docs.length;
     final newNumber = count + 1;
     final formattedNumber = newNumber.toString().padLeft(4, '0');
-    final code = 'TPB${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$formattedNumber';
+    final code = 'TKB${now.year % 100}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$formattedNumber';
     return code;
   }
 
   Future<void> _setInitialNoForm() async {
     final generatedCode = await generateNoForm();
-    setState(() {
-      _formNumberController.text = generatedCode;
-    });
+    if (mounted) {
+      setState(() {
+        _formNumberController.text = generatedCode;
+      });
+    }
   }
 
   Future<void> _saveReceipt() async {
-    if (!_formKey.currentState!.validate() || _details.isEmpty) {
-      return;
-    }
+    if (!_formKey.currentState!.validate() || _details.isEmpty) return;
     final storeCode = await StoreService.getStoreCode();
     if (storeCode == null) return;
     final storeQuery = await FirebaseFirestore.instance.collection('stores').where('code', isEqualTo: storeCode).limit(1).get();
@@ -115,8 +132,8 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
       'no_form': _formNumberController.text.trim(),
       'receiver_name': _formReceiverNameController.text.trim(),
       'item_total': itemTotal,
-      'post_date': _formPostDateController.text.trim(),
-      'created_at': DateTime.now(),
+      'post_date': Timestamp.fromDate(_postDate!),
+      'created_at': Timestamp.now(),
       'store_ref': storeRef,
     };
     final shipmentDoc = await FirebaseFirestore.instance.collection('salesGoodsShipment').add(shipment);
@@ -127,16 +144,10 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
         final productData = productSnapshot.data() as Map<String, dynamic>?;
         if (productData != null) {
           final currentStock = productData['stock'] ?? 0;
-          final updatedStock = currentStock - detail.qty;
-          await detail.productRef!.update({'stock': updatedStock});
+          await detail.productRef!.update({'stock': currentStock - detail.qty});
         }
         if (detail.warehouseRef != null) {
-          final wsQuery = await FirebaseFirestore.instance
-              .collection('warehouseStocks')
-              .where('product_ref', isEqualTo: detail.productRef)
-              .where('warehouse_ref', isEqualTo: detail.warehouseRef)
-              .limit(1)
-              .get();
+          final wsQuery = await FirebaseFirestore.instance.collection('warehouseStocks').where('product_ref', isEqualTo: detail.productRef).where('warehouse_ref', isEqualTo: detail.warehouseRef).limit(1).get();
           if (wsQuery.docs.isNotEmpty) {
             final wsDoc = wsQuery.docs.first;
             final wsData = wsDoc.data();
@@ -175,7 +186,21 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Tambah Pengiriman'), centerTitle: true),
-      body: _products.isEmpty
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.save_alt_outlined),
+          label: const Text("Simpan Pengiriman", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: _saveReceipt,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: accentOrange,
+            foregroundColor: cleanWhite,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: accentOrange))
           : Padding(
               padding: const EdgeInsets.all(16),
@@ -189,9 +214,10 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
                         shrinkWrap: true,
                         children: [
                           TextFormField(
-                              controller: _formNumberController,
-                              decoration: _buildInputDecoration('No. Form'),
-                              readOnly: true),
+                            controller: _formNumberController,
+                            decoration: _buildInputDecoration('No. Form'),
+                            readOnly: true,
+                          ),
                           const SizedBox(height: 16),
                           TextFormField(
                               controller: _formReceiverNameController,
@@ -202,18 +228,16 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
                             onTap: _selectPostDate,
                             child: AbsorbPointer(
                               child: TextFormField(
+                                controller: _postDateController,
                                 decoration: InputDecoration(
-                                  labelText: 'Tanggal Penerimaan',
+                                  labelText: 'Tanggal Pengiriman',
+                                  suffixIcon: const Icon(Icons.calendar_today),
                                   filled: true,
                                   fillColor: Colors.black.withOpacity(0.05),
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                                  suffixIcon: const Icon(Icons.calendar_today),
                                 ),
                                 validator: (val) => _postDate == null ? 'Wajib dipilih' : null,
-                                controller: TextEditingController(
-                                  text: _postDate == null ? '' : DateFormat('dd/MM/yyyy').format(_postDate!),
-                                ),
                               ),
                             ),
                           ),
@@ -231,6 +255,7 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
                             final i = entry.key;
                             final item = entry.value;
                             return Card(
+                              color: cleanWhite,
                               margin: const EdgeInsets.symmetric(vertical: 8),
                               elevation: 1,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -238,27 +263,38 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
                                 padding: const EdgeInsets.all(12),
                                 child: Column(
                                   children: [
-                                    DropdownButtonFormField<DocumentReference>(
-                                        value: item.productRef,
-                                        items: _products.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
-                                        onChanged: (value) async {
-                                          setState(() => item.productRef = value);
-                                          await item.fetchWarehouseStock();
-                                          setState(() {});
-                                        },
-                                        decoration: _buildInputDecoration("Produk"),
-                                        validator: (value) => value == null ? 'Pilih produk' : null),
+                                    DropdownSearch<DocumentReference>(
+                                      items: _products.map((doc) => doc.reference).toList(),
+                                      selectedItem: item.productRef,
+                                      itemAsString: (ref) {
+                                        final found = _products.where((doc) => doc.reference == ref);
+                                        return found.isNotEmpty ? found.first['name'] : '';
+                                      },
+                                      dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration("Produk")),
+                                      onChanged: (ref) {
+                                        setState(() {
+                                          item.productRef = ref;
+                                          item.unitName = 'pcs';
+                                        });
+                                      },
+                                      validator: (val) => val == null ? 'Pilih produk' : null,
+                                      popupProps: PopupProps.menu(
+                                        showSearchBox: true,
+                                        searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari produk...')),
+                                      ),
+                                    ),
                                     const SizedBox(height: 12),
                                     DropdownButtonFormField<DocumentReference>(
-                                        value: item.warehouseRef,
-                                        items: _warehouses.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
-                                        onChanged: (value) async {
-                                          setState(() => item.warehouseRef = value);
-                                          await item.fetchWarehouseStock();
-                                          setState(() {});
-                                        },
-                                        decoration: _buildInputDecoration("Gudang Asal"),
-                                        validator: (value) => value == null ? 'Pilih gudang' : null),
+                                      value: item.warehouseRef,
+                                      items: _warehouses.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
+                                      onChanged: (value) async {
+                                        setState(() => item.warehouseRef = value);
+                                        await item.fetchWarehouseStock();
+                                        setState(() {});
+                                      },
+                                      decoration: _buildInputDecoration("Gudang Asal"),
+                                      validator: (value) => value == null ? 'Pilih gudang' : null,
+                                    ),
                                     const SizedBox(height: 12),
                                     TextFormField(
                                         initialValue: item.qty.toString(),
@@ -303,16 +339,6 @@ class _AddShipmentPageState extends State<AddShipmentPage> {
                           ),
                           const SizedBox(height: 16),
                           Text("Item Total: $itemTotal", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _saveReceipt,
-                            style: ElevatedButton.styleFrom(
-                                backgroundColor: accentOrange,
-                                foregroundColor: cleanWhite,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                            child: const Text("Simpan Shipment"),
-                          ),
                         ],
                       ),
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/store_service.dart';
 import 'package:intl/intl.dart';
+import 'package:dropdown_search/dropdown_search.dart';
 
 class AddReceiptPage extends StatefulWidget {
   const AddReceiptPage({super.key});
@@ -13,23 +14,31 @@ class AddReceiptPage extends StatefulWidget {
 class _AddReceiptPageState extends State<AddReceiptPage> {
   final _formKey = GlobalKey<FormState>();
   final _formNumberController = TextEditingController();
+  final _postDateController = TextEditingController();
   DateTime? _postDate;
   DocumentReference? _selectedSupplier;
   DocumentReference? _selectedWarehouse;
+  DocumentReference? _selectedInvoice;
+  DocumentSnapshot? _selectedInvoiceDoc;
   List<DocumentSnapshot> _suppliers = [];
   List<DocumentSnapshot> _warehouses = [];
+  List<DocumentSnapshot> _invoices = [];
   List<DocumentSnapshot> _products = [];
   final List<_DetailItem> _details = [];
+  bool _isLoading = true;
 
   static const Color midnightBlue = Color(0xFF003366);
   static const Color accentOrange = Color(0xFFFFA500);
   static const Color cleanWhite = Colors.white;
+  static const Color lightGray = Color(0xFFF5F5F5);
 
   @override
   void initState() {
     super.initState();
     _fetchDropdownData();
     _setInitialNoForm();
+    _postDate = DateTime.now();
+    _updatePostDateController();
   }
 
   Future<void> _fetchDropdownData() async {
@@ -41,21 +50,33 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
       final storeRef = storeQuery.docs.first.reference;
       final supplierSnap = await FirebaseFirestore.instance.collection('suppliers').where('store_ref', isEqualTo: storeRef).get();
       final warehouseSnap = await FirebaseFirestore.instance.collection('warehouses').where('store_ref', isEqualTo: storeRef).get();
+      final invoiceSnap = await FirebaseFirestore.instance.collection('purchaseInvoices').where('store_ref', isEqualTo: storeRef).get();
       final productSnap = await FirebaseFirestore.instance.collection('products').where('store_ref', isEqualTo: storeRef).get();
       if (mounted) {
         setState(() {
           _suppliers = supplierSnap.docs;
           _warehouses = warehouseSnap.docs;
+          _invoices = invoiceSnap.docs;
           _products = productSnap.docs;
+          _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('Error fetching dropdown data: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   int get itemTotal => _details.fold(0, (sum, item) => sum + item.qty);
   int get grandTotal => _details.fold(0, (sum, item) => sum + item.subtotal);
+
+  void _updatePostDateController() {
+    _postDateController.text = _postDate == null ? '' : DateFormat('dd-MM-yyyy').format(_postDate!);
+  }
 
   Future<void> _selectPostDate() async {
     final now = DateTime.now();
@@ -67,16 +88,17 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            colorScheme: const ColorScheme.light(primary: midnightBlue, onPrimary: cleanWhite, onSurface: midnightBlue),
+            colorScheme: const ColorScheme.light(primary: accentOrange, onPrimary: cleanWhite, onSurface: midnightBlue),
             buttonTheme: const ButtonThemeData(textTheme: ButtonTextTheme.primary),
           ),
           child: child!,
         );
       },
     );
-    if (picked != null && picked != _postDate) {
+    if (picked != null) {
       setState(() {
         _postDate = picked;
+        _updatePostDateController();
       });
     }
   }
@@ -91,15 +113,17 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
     final count = snapshot.docs.length;
     final newNumber = count + 1;
     final formattedNumber = newNumber.toString().padLeft(4, '0');
-    final code = 'TTB${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$formattedNumber';
+    final code = 'TTB${now.year % 100}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}$formattedNumber';
     return code;
   }
 
   Future<void> _setInitialNoForm() async {
     final generatedCode = await generateNoForm();
-    setState(() {
-      _formNumberController.text = generatedCode;
-    });
+    if (mounted) {
+      setState(() {
+        _formNumberController.text = generatedCode;
+      });
+    }
   }
 
   Future<void> _saveReceipt() async {
@@ -120,6 +144,7 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
       'store_ref': storeRef,
       'supplier_ref': _selectedSupplier,
       'warehouse_ref': _selectedWarehouse,
+      'invoice_ref': _selectedInvoice,
       'synced': true,
     };
     final receiptDoc = await FirebaseFirestore.instance.collection('purchaseGoodsReceipts').add(receipt);
@@ -167,159 +192,229 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
     });
   }
 
-  InputDecoration _buildInputDecoration(String label) {
+  InputDecoration _buildInputDecoration(String label, {IconData? icon}) {
     return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.black.withOpacity(0.05),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        labelText: label,
+        labelStyle: TextStyle(color: midnightBlue.withOpacity(0.8)),
+        prefixIcon: icon != null ? Icon(icon, color: midnightBlue.withOpacity(0.7)) : null,
+        filled: true,
+        fillColor: Colors.black.withOpacity(0.05),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: accentOrange))
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tambah Penerimaan'), centerTitle: true),
-      body: _products.isEmpty
+      backgroundColor: lightGray,
+      appBar: AppBar(
+        title: const Text('Tambah Penerimaan'),
+        centerTitle: true,
+        backgroundColor: midnightBlue,
+        foregroundColor: cleanWhite,
+        elevation: 0,
+      ),
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 16.0),
+        child: ElevatedButton.icon(
+          icon: const Icon(Icons.save_alt_outlined),
+          label: const Text("Simpan Penerimaan", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          onPressed: _saveReceipt,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: accentOrange,
+            foregroundColor: cleanWhite,
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+      ),
+      body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: accentOrange))
-          : Padding(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: Row(
+          : Form(
+        key: _formKey,
+        child: ListView(
+          padding: const EdgeInsets.all(16.0),
+          children: [
+            Card(
+              color: cleanWhite,
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          TextFormField(controller: _formNumberController, decoration: _buildInputDecoration('No. Form'), readOnly: true),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<DocumentReference>(
-                              decoration: _buildInputDecoration('Supplier'),
-                              items: _suppliers.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
-                              onChanged: (val) => setState(() => _selectedSupplier = val),
-                              validator: (val) => val == null ? 'Wajib dipilih' : null),
-                          const SizedBox(height: 16),
-                          DropdownButtonFormField<DocumentReference>(
-                              decoration: _buildInputDecoration('Warehouse'),
-                              items: _warehouses.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
-                              onChanged: (val) => setState(() => _selectedWarehouse = val),
-                              validator: (val) => val == null ? 'Wajib dipilih' : null),
-                          const SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: _selectPostDate,
-                            child: AbsorbPointer(
-                              child: TextFormField(
-                                decoration: InputDecoration(
-                                  labelText: 'Tanggal Penerimaan',
-                                  filled: true,
-                                  fillColor: Colors.black.withOpacity(0.05),
-                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                                  suffixIcon: const Icon(Icons.calendar_today),
-                                ),
-                                validator: (val) => _postDate == null ? 'Wajib dipilih' : null,
-                                controller: TextEditingController(text: _postDate == null ? '' : DateFormat('dd MMMM yyyy').format(_postDate!)),
-                              ),
-                            ),
-                          ),
-                        ],
+                    TextFormField(controller: _formNumberController, decoration: _buildInputDecoration('No. Form', icon: Icons.article_outlined), readOnly: true),
+                    const SizedBox(height: 16),
+                    GestureDetector(
+                      onTap: _selectPostDate,
+                      child: AbsorbPointer(
+                        child: TextFormField(
+                          controller: _postDateController,
+                          decoration: _buildInputDecoration('Tanggal Penerimaan').copyWith(suffixIcon: const Icon(Icons.calendar_today, color: midnightBlue)),
+                          validator: (val) => _postDate == null ? 'Wajib dipilih' : null,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 32),
-                    Expanded(
-                      flex: 2,
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          const Text('Detail Produk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          ..._details.asMap().entries.map((entry) {
-                            final i = entry.key;
-                            final item = entry.value;
-                            return Card(
-                              margin: const EdgeInsets.symmetric(vertical: 8),
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Column(
-                                  children: [
-                                    DropdownButtonFormField<DocumentReference>(
-                                        value: item.productRef,
-                                        items: _products.map((doc) => DropdownMenuItem(value: doc.reference, child: Text(doc['name']))).toList(),
-                                        onChanged: (value) => setState(() {
-                                              item.productRef = value;
-                                              item.updatePriceFromProduct();
-                                              item.unitName = 'pcs';
-                                            }),
-                                        decoration: _buildInputDecoration("Produk"),
-                                        validator: (value) => value == null ? 'Pilih produk' : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: item.priceController,
-                                        decoration: _buildInputDecoration("Harga"),
-                                        keyboardType: TextInputType.number,
-                                        onChanged: (val) => setState(() => item.price = int.tryParse(val) ?? 0),
-                                        validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
-                                    const SizedBox(height: 12),
-                                    TextFormField(
-                                        controller: item.qtyController,
-                                        decoration: _buildInputDecoration("Jumlah"),
-                                        keyboardType: TextInputType.number,
-                                        onChanged: (val) => setState(() => item.qty = int.tryParse(val) ?? 1),
-                                        validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
-                                    const SizedBox(height: 8),
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(left: 12.0),
-                                        child: Text("Subtotal: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(item.subtotal)}", style: const TextStyle(fontWeight: FontWeight.w500)),
-                                      ),
-                                    ),
-                                    TextButton.icon(
-                                      onPressed: () => _removeDetail(i),
-                                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                      label: const Text("Hapus", style: TextStyle(color: Colors.red)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            onPressed: _addDetail,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Tambah Produk'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.grey[200],
-                              foregroundColor: Colors.black,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text("Item Total: $itemTotal", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          Text("Grand Total: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(grandTotal)}",
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: midnightBlue)),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                              onPressed: _saveReceipt,
-                              style: ElevatedButton.styleFrom(
-                                  backgroundColor: accentOrange,
-                                  foregroundColor: cleanWhite,
-                                  padding: const EdgeInsets.symmetric(vertical: 16),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                              child: const Text("Simpan Receipt")),
-                        ],
-                      ),
+                    const SizedBox(height: 16),
+                    DropdownSearch<DocumentSnapshot>(
+                      items: _suppliers,
+                      itemAsString: (doc) => doc['name'],
+                      selectedItem: _suppliers.any((doc) => doc.reference == _selectedSupplier) ? _suppliers.firstWhere((doc) => doc.reference == _selectedSupplier) : null,
+                      dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration('Supplier', icon: Icons.people_alt_outlined)),
+                      onChanged: (doc) => setState(() => _selectedSupplier = doc?.reference),
+                      validator: (val) => val == null ? 'Wajib dipilih' : null,
+                      popupProps: PopupProps.menu(
+                          showSearchBox: true,
+                          searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari supplier...')),
+                          containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget)),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownSearch<DocumentSnapshot>(
+                        items: _warehouses,
+                        itemAsString: (doc) => doc['name'],
+                        selectedItem: _warehouses.any((doc) => doc.reference == _selectedWarehouse) ? _warehouses.firstWhere((doc) => doc.reference == _selectedWarehouse) : null,
+                        dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration('Warehouse', icon: Icons.warehouse_outlined)),
+                        onChanged: (doc) => setState(() => _selectedWarehouse = doc?.reference),
+                        validator: (val) => val == null ? 'Wajib dipilih' : null,
+                        popupProps: PopupProps.menu(
+                            showSearchBox: true,
+                            searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari warehouse...')),
+                            containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget))
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownSearch<DocumentSnapshot>(
+                      items: _invoices,
+                      itemAsString: (doc) => doc['invoice_number'],
+                      selectedItem: _selectedInvoiceDoc,
+                      dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration('No. Invoice (Opsional)', icon: Icons.receipt_long_outlined)),
+                      onChanged: (doc) async {
+                        if (doc == null) return;
+                        setState(() {
+                          _selectedInvoiceDoc = doc;
+                          _selectedInvoice = doc.reference;
+                          _details.clear();
+                        });
+                        final invoiceDetailsSnap = await doc.reference.collection('details').get();
+                        final newDetails = invoiceDetailsSnap.docs.map((detailDoc) {
+                          final data = detailDoc.data();
+                          final detailItem = _DetailItem(products: _products)
+                            ..productRef = data['product_ref'] as DocumentReference?
+                            ..price = data['price'] ?? 0
+                            ..qty = data['qty'] ?? 1
+                            ..unitName = data['unit_name'] ?? 'unit'
+                            ..priceController.text = (data['price'] ?? 0).toString()
+                            ..qtyController.text = (data['qty'] ?? 1).toString();
+                          return detailItem;
+                        }).toList();
+                        setState(() => _details.addAll(newDetails));
+                      },
+                      popupProps: PopupProps.menu(
+                          showSearchBox: true,
+                          searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari invoice...')),
+                          containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget)),
                     ),
                   ],
                 ),
               ),
             ),
+
+            const SizedBox(height: 24),
+            Text('Detail Produk', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: midnightBlue)),
+            const SizedBox(height: 4),
+
+            ..._details.asMap().entries.map((entry) {
+              final i = entry.key;
+              final item = entry.value;
+              return Card(
+                color: cleanWhite,
+                margin: const EdgeInsets.symmetric(vertical: 8),
+                elevation: 2,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    children: [
+                      DropdownSearch<DocumentReference>(
+                        items: _products.map((doc) => doc.reference).toList(),
+                        selectedItem: item.productRef,
+                        itemAsString: (ref) {
+                          final found = _products.where((doc) => doc.reference == ref);
+                          return found.isNotEmpty ? found.first['name'] : '';
+                        },
+                        dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration("Produk")),
+                        onChanged: (ref) {
+                          setState(() {
+                            item.productRef = ref;
+                            item.updatePriceFromProduct();
+                            item.unitName = 'pcs';
+                          });
+                        },
+                        validator: (val) => val == null ? 'Pilih produk' : null,
+                        popupProps: PopupProps.menu(
+                            showSearchBox: true,
+                            searchFieldProps: TextFieldProps(decoration: _buildInputDecoration('Cari produk...')),
+                            containerBuilder: (ctx, popupWidget) => Material(elevation: 8, borderRadius: BorderRadius.circular(12), color: cleanWhite, child: popupWidget)),
+                      ),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                          controller: item.priceController,
+                          decoration: _buildInputDecoration("Harga"),
+                          keyboardType: TextInputType.number,
+                          onChanged: (val) => setState(() => item.price = int.tryParse(val) ?? 0),
+                          validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
+                      const SizedBox(height: 12),
+                      TextFormField(
+                          controller: item.qtyController,
+                          decoration: _buildInputDecoration("Jumlah"),
+                          keyboardType: TextInputType.number,
+                          onChanged: (val) => setState(() => item.qty = int.tryParse(val) ?? 1),
+                          validator: (val) => val == null || val.isEmpty ? 'Wajib diisi' : null),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(left: 12.0),
+                            child: Text("Subtotal: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(item.subtotal)}",
+                                style: const TextStyle(fontWeight: FontWeight.w600, color: midnightBlue)),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _removeDetail(i),
+                            icon: Icon(Icons.delete_outline, color: Colors.redAccent.shade400, size: 20),
+                            label: Text("Hapus", style: TextStyle(color: Colors.redAccent.shade400)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: _addDetail,
+              icon: const Icon(Icons.add),
+              label: const Text('Tambah Produk'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: accentOrange,
+                side: const BorderSide(color: accentOrange),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text("Grand Total: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(grandTotal)}",
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: midnightBlue)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -337,7 +432,7 @@ class _DetailItem {
 
   void updatePriceFromProduct() {
     if (productRef == null) return;
-    final productDoc = products.firstWhere((doc) => doc.reference == productRef);
+    final productDoc = products.firstWhere((doc) => doc.reference == productRef, orElse: () => products.first);
     final data = productDoc.data() as Map<String, dynamic>;
     price = data['price'] ?? 0;
     priceController.text = price.toString();
@@ -346,12 +441,6 @@ class _DetailItem {
   int get subtotal => price * qty;
 
   Map<String, dynamic> toMap() {
-    return {
-      'product_ref': productRef,
-      'price': price,
-      'qty': qty,
-      'unit_name': unitName,
-      'subtotal': subtotal,
-    };
+    return {'product_ref': productRef, 'price': price, 'qty': qty, 'unit_name': unitName, 'subtotal': subtotal};
   }
 }

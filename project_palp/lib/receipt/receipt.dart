@@ -91,45 +91,52 @@ class _ReceiptPageState extends State<ReceiptPage> {
           : _allReceipts.isEmpty
               ? Center(
                   child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey[400]),
-                    const SizedBox(height: 16),
-                    const Text('Tidak ada data penerimaan', style: TextStyle(fontSize: 18, color: Colors.grey)),
-                  ],
-                ))
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.receipt_long_outlined, size: 80, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      const Text('Tidak ada data penerimaan', style: TextStyle(fontSize: 18, color: Colors.grey)),
+                    ],
+                  ),
+                )
               : Column(
                   children: [
+                    Container(
+                      height: 50, 
+                      color: Colors.transparent, 
+                    ),
+
                     Expanded(
                       child: RefreshIndicator(
                         onRefresh: _loadReceiptsForStore,
                         color: accentOrange,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
+                        child: Center(
                           child: SizedBox(
-                            width: MediaQuery.of(context).size.width * 2.5,
+                            width: MediaQuery.of(context).size.width,
                             child: DataTable2(
-                              columnSpacing: 20,
-                              horizontalMargin: 16,
+                              headingTextStyle: const TextStyle(color: midnightBlue, fontWeight: FontWeight.bold, fontSize: 12),
+                              dataTextStyle: const TextStyle(fontSize: 11.5, color: Colors.black87),
+                              columnSpacing: 12,
+                              horizontalMargin: 12,
+
                               headingRowColor: WidgetStateProperty.all(midnightBlue.withOpacity(0.05)),
-                              headingTextStyle: const TextStyle(color: midnightBlue, fontWeight: FontWeight.bold),
                               columns: const [
                                 DataColumn2(label: Center(child: Text('No Form')), size: ColumnSize.M),
                                 DataColumn2(label: Center(child: Text('Created At')), size: ColumnSize.L),
                                 DataColumn2(label: Center(child: Text('Post Date')), size: ColumnSize.M),
-                                DataColumn2(label: Center(child: Text('Grand Total')), size: ColumnSize.L),
-                                DataColumn2(label: Center(child: Text('Qty Total')), size: ColumnSize.S),
+                                DataColumn2(label: Center(child: Text('Grand Total')), size: ColumnSize.L, numeric: true),
+                                DataColumn2(label: Center(child: Text('Qty Total')), size: ColumnSize.S, numeric: true),
                                 DataColumn2(label: Center(child: Text('Synced')), size: ColumnSize.S),
                                 DataColumn2(label: Center(child: Text('Supplier')), size: ColumnSize.L),
                                 DataColumn2(label: Center(child: Text('Warehouse')), size: ColumnSize.L),
-                                DataColumn2(label: Center(child: Text('Receipt Details')), size: ColumnSize.M),
-                                DataColumn2(label: Center(child: Text('Action')), size: ColumnSize.L),
+                                DataColumn2(label: Center(child: Text('Details')), fixedWidth: 100),
+                                DataColumn2(label: Center(child: Text('Actions')), fixedWidth: 120),
                               ],
                               rows: _allReceipts.map((doc) {
                                 final receipt = doc.data() as Map<String, dynamic>;
                                 return DataRow(cells: [
                                   DataCell(Text(receipt['no_form'] ?? '-')),
-                                  DataCell(Text(receipt['created_at'] != null ? DateFormat('dd MMM yyyy, HH:mm').format(receipt['created_at'].toDate()) : '-')),
+                                  DataCell(Text(receipt['created_at'] != null ? DateFormat('dd MMM yy, HH:mm').format(receipt['created_at'].toDate()) : '-')),
                                   DataCell(Text(receipt['post_date'] != null ? DateFormat('dd/MM/yyyy').format((receipt['post_date'] as Timestamp).toDate()) : '-')),
                                   DataCell(Align(
                                     alignment: Alignment.centerRight,
@@ -139,36 +146,39 @@ class _ReceiptPageState extends State<ReceiptPage> {
                                     alignment: Alignment.centerRight,
                                     child: Text(receipt['item_total']?.toString() ?? '-'),
                                   )),
-                                  DataCell(Align(
-                                    alignment: Alignment.center,
-                                    child: Icon(
-                                      receipt['synced'] == true ? Icons.check_circle : Icons.cancel,
-                                      color: receipt['synced'] == true ? Colors.green : Colors.red,
+                                  DataCell(
+                                    Center(
+                                      child: Icon(
+                                        receipt['synced'] == true ? Icons.check_circle_outline : Icons.cancel_outlined,
+                                        color: receipt['synced'] == true ? Colors.green : Colors.red,
+                                      ),
                                     ),
-                                  )),
+                                  ),
                                   DataCell(FutureBuilder<String>(
                                     future: _getSupplierName(receipt['supplier_ref']),
-                                    builder: (context, snapshot) => Text(snapshot.data ?? '...'),
+                                    builder: (context, snapshot) => Text(snapshot.data ?? '...', overflow: TextOverflow.ellipsis),
                                   )),
                                   DataCell(FutureBuilder<String>(
                                     future: _getWarehouseName(receipt['warehouse_ref']),
-                                    builder: (context, snapshot) => Text(snapshot.data ?? '...'),
+                                    builder: (context, snapshot) => Text(snapshot.data ?? '...', overflow: TextOverflow.ellipsis),
                                   )),
-                                  DataCell(Center(
-                                    child: TextButton(
-                                      style: TextButton.styleFrom(foregroundColor: accentOrange),
-                                      onPressed: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (context) => ReceiptDetailsPage(receiptRef: doc.reference)),
-                                        );
-                                        await _loadReceiptsForStore();
-                                      },
-                                      child: const Text("Detail"),
+                                  DataCell(
+                                    Center(
+                                      child: TextButton(
+                                        style: TextButton.styleFrom(foregroundColor: accentOrange),
+                                        onPressed: () async {
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(builder: (context) => ReceiptDetailsPage(receiptRef: doc.reference)),
+                                          );
+                                          await _loadReceiptsForStore();
+                                        },
+                                        child: const Text("Detail"),
+                                      ),
                                     ),
-                                  )),
-                                  DataCell(Center(
-                                    child: Row(
+                                  ),
+                                  DataCell(
+                                    Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         IconButton(
@@ -191,7 +201,7 @@ class _ReceiptPageState extends State<ReceiptPage> {
                                         ),
                                       ],
                                     ),
-                                  )),
+                                  ),
                                 ]);
                               }).toList(),
                             ),
@@ -200,9 +210,9 @@ class _ReceiptPageState extends State<ReceiptPage> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 16, right: 16, top: 16),
+                      padding: const EdgeInsets.all(16.0),
                       child: Align(
-                        alignment: Alignment.bottomRight,
+                        alignment: Alignment.centerRight,
                         child: ElevatedButton.icon(
                           icon: const Icon(Icons.add),
                           onPressed: () async {
@@ -368,19 +378,28 @@ class _ReceiptDetailsPageState extends State<ReceiptDetailsPage> {
                       elevation: 2,
                       color: cleanWhite,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: ListTile(
-                        leading: const Icon(Icons.inventory_2_outlined, color: midnightBlue),
-                        title: FutureBuilder<String>(
-                          future: _getProductName(data['product_ref']),
-                          builder: (context, snapshot) {
-                            return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold, color: midnightBlue));
-                          },
-                        ),
-                        subtitle: Text(
-                            "Qty: ${data['qty'] ?? '-'} ${data['unit_name'] ?? ''}  •  Harga: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['price'] ?? 0)}"),
-                        trailing: Text(
-                          NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['subtotal'] ?? 0),
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            FutureBuilder<String>(
+                              future: _getProductName(data['product_ref']),
+                              builder: (context, snapshot) {
+                                return Text(snapshot.data ?? 'Memuat...', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: midnightBlue));
+                              },
+                            ),
+                            const Divider(height: 12),
+                            Text("Qty: ${data['qty'] ?? '-'}"),
+                            Text("Unit: ${data['unit_name'] ?? '-'}"),
+                            Text("Price: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['price'] ?? 0)}"),
+                            const SizedBox(height: 4),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text("Subtotal: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(data['subtotal'] ?? 0)}",
+                                  style: const TextStyle(fontWeight: FontWeight.w600)),
+                            ),
+                          ],
                         ),
                       ),
                     );

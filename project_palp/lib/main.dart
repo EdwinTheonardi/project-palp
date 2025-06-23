@@ -50,11 +50,12 @@ class MyApp extends StatelessWidget {
           backgroundColor: midnightBlue,
           foregroundColor: cleanWhite,
           elevation: 2.0,
+          centerTitle: true,
           titleTextStyle: TextStyle(
             fontFamily: 'Poppins',
             fontSize: 20,
             fontWeight: FontWeight.w600,
-            color: cleanWhite, // INI PERBAIKANNYA
+            color: cleanWhite,
           ),
         ),
         drawerTheme: const DrawerThemeData(
@@ -113,7 +114,6 @@ class _NavigationHomePageState extends State<NavigationHomePage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_pageTitles[_selectedIndex]),
-        centerTitle: true,
       ),
       drawer: Drawer(
         child: ListView(

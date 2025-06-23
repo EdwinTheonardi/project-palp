@@ -92,65 +92,89 @@ class _ProductPageState extends State<ProductPage> {
                             ),
                             child: Padding(
                               padding: const EdgeInsets.all(16.0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
                                           '${product['name'] ?? '-'}',
                                           style: const TextStyle(
-                                            fontSize: 17,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
                                             color: midnightBlue,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Harga: ${NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(product['price'] ?? 0)}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[800],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Stok: ${product['stock'] ?? '-'}',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[800],
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Row(
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600]),
-                                        tooltip: "Edit Product",
-                                        onPressed: () async {
-                                          await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => EditProductPage(productRef: _allProducts[index].reference),
-                                            ),
-                                          );
-                                          await _loadProductsForStore();
-                                        },
                                       ),
-                                      IconButton(
-                                        icon: Icon(Icons.delete_outline, color: Colors.redAccent[400]),
-                                        tooltip: "Hapus Product",
-                                        onPressed: () async {
-                                          _showDeleteConfirmationDialog(context, _allProducts[index].reference);
-                                        },
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            icon: Icon(Icons.edit_outlined, color: Colors.blueGrey[600], size: 20),
+                                            tooltip: "Edit Product",
+                                            onPressed: () async {
+                                              await Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => EditProductPage(productRef: _allProducts[index].reference),
+                                                ),
+                                              );
+                                              await _loadProductsForStore();
+                                            },
+                                          ),
+                                          const SizedBox(width: 12),
+                                          IconButton(
+                                            padding: EdgeInsets.zero,
+                                            constraints: const BoxConstraints(),
+                                            icon: Icon(Icons.delete_outline, color: Colors.redAccent[400], size: 20),
+                                            tooltip: "Hapus Product",
+                                            onPressed: () async {
+                                              _showDeleteConfirmationDialog(context, _allProducts[index].reference);
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
+                                  const Divider(height: 24),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text("Harga", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                          Text(
+                                            NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(product['price'] ?? 0),
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.grey[800],
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.end,
+                                        children: [
+                                          const Text("Jumlah Stok", style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                          Text(
+                                            '${product['stock'] ?? '0'}',
+                                            style: const TextStyle(
+                                              fontSize: 24,
+                                              color: accentOrange,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  )
                                 ],
                               ),
                             ),
