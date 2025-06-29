@@ -169,7 +169,7 @@ class _AddInvoicePageState extends State<AddInvoicePage> {
       'created_at': Timestamp.now(),
       'due_date': _dueDate != null ? Timestamp.fromDate(_dueDate!) : null,
       'grandtotal': grandTotal,
-      'invoice_number': _formNumberController.text.trim(),
+      'no_invoice': _formNumberController.text.trim(),
       'payment_type': _selectedPaymentType,
       'post_date': Timestamp.fromDate(_postDate!),
       'shipping_cost': int.tryParse(_shippingCostController.text) ?? 0,

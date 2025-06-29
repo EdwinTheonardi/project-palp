@@ -76,7 +76,7 @@ class _EditInvoicePageState extends State<EditInvoicePage> {
 
       if(mounted) {
         setState(() {
-          _formNumberController.text = invoiceData['invoice_number'] ?? '';
+          _formNumberController.text = invoiceData['no_invoice'] ?? '';
           _shippingCostController.text = (invoiceData['shipping_cost'] ?? 0).toString();
           _selectedPaymentType = invoiceData['payment_type'];
           _postDate = (invoiceData['post_date'] as Timestamp).toDate();
@@ -167,7 +167,7 @@ class _EditInvoicePageState extends State<EditInvoicePage> {
     }
 
     final updatedData = {
-      'invoice_number': _formNumberController.text.trim(),
+      'no_invoice': _formNumberController.text.trim(),
       'grandtotal': grandTotal,
       'item_total': itemTotal,
       'payment_type': _selectedPaymentType,

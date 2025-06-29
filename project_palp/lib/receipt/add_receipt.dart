@@ -287,7 +287,7 @@ class _AddReceiptPageState extends State<AddReceiptPage> {
                     const SizedBox(height: 16),
                     DropdownSearch<DocumentSnapshot>(
                       items: _invoices,
-                      itemAsString: (doc) => doc['invoice_number'],
+                      itemAsString: (doc) => doc['no_invoice'],
                       selectedItem: _selectedInvoiceDoc,
                       dropdownDecoratorProps: DropDownDecoratorProps(dropdownSearchDecoration: _buildInputDecoration('No. Invoice (Opsional)', icon: Icons.receipt_long_outlined)),
                       onChanged: (doc) async {
